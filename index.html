@@ -1053,25 +1053,30 @@ function backupJSON(){ return JSON.stringify({ app:'troskovi', version:1, export
 function stamp(){ const d = new Date(); return isoDate(d) + '_' + pad2(d.getHours()) + pad2(d.getMinutes()) + pad2(d.getSeconds()); }
 function markBackup(){ S.settings.lastBackup = new Date().toISOString(); persistSettings(); renderSettings(); }
 const bkStatus = t => { $('#bkStatus').textContent = t || ''; };
+// Chrome na Androidu deli samo određene tipove fajlova (npr. .txt, .csv, slike) — .json odbija,
+// pa se bekap deli kao .txt (sadržaj je i dalje JSON i „Vrati iz bekapa…“ ga prepoznaje).
+let lastShareErr = '';
 async function shareOrDownload(filename, data, mime){
   const file = new File([data], filename, { type: mime });
+  lastShareErr = '';
   if (navigator.canShare && navigator.share){
     let ok = false; try { ok = navigator.canShare({ files:[file] }); } catch(e){}
     if (ok){
-      try { await navigator.share({ files:[file], title: filename }); return 'shared'; }
-      catch(e){ if (e && e.name === 'AbortError') return 'cancel'; }
-    }
-  }
+      try { await navigator.share({ files:[file] }); return 'shared'; }
+      catch(e){ if (e && e.name === 'AbortError') return 'cancel'; lastShareErr = (e && e.name) || 'greška'; }
+    } else lastShareErr = 'tip fajla nije podržan';
+  } else lastShareErr = 'pregledač nema deljenje fajlova';
   const url = URL.createObjectURL(file), a = document.createElement('a');
   a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 5000);
   return 'downloaded';
 }
 async function fileBackup(){
-  const r = await shareOrDownload('troskovi-bekap-' + stamp() + '.json', backupJSON(), 'application/json');
+  const r = await shareOrDownload('troskovi-bekap-' + stamp() + '.txt', backupJSON(), 'text/plain');
   if (r === 'cancel'){ bkStatus('Bekap je otkazan.'); return; }
   markBackup(); renderHome();
-  bkStatus(r === 'shared' ? '✅ Bekap je predat — proveri da je stigao u Dropbox.' : '✅ Bekap fajl je preuzet (fascikla Preuzimanja).');
+  bkStatus(r === 'shared' ? '✅ Bekap je predat — proveri da je stigao u Dropbox.'
+    : `⚠️ Meni za deljenje nije mogao da se otvori (${lastShareErr}), pa je bekap sačuvan u Preuzimanja (Downloads). Otvori Dropbox aplikaciju → ＋ → Otpremi fajl i izaberi ga.`);
 }
 async function csvExport(){
   const q = s => '"' + String(s ?? '').replace(/"/g, '""') + '"';
@@ -1081,7 +1086,7 @@ async function csvExport(){
     lines.push([it.d, it.t || '', q(n.name), q(n.sub), String(it.a).replace('.', ','), it.c, toRSD(it).toFixed(2).replace('.', ','), toEUR(it).toFixed(2).replace('.', ','), String(it.r).replace('.', ','), q(it.n)].join(';'));
   });
   const r = await shareOrDownload('troskovi-' + stamp() + '.csv', '﻿' + lines.join('\r\n'), 'text/csv');
-  bkStatus(r === 'cancel' ? 'Izvoz je otkazan.' : '✅ CSV je izvezen.');
+  bkStatus(r === 'cancel' ? 'Izvoz je otkazan.' : r === 'shared' ? '✅ CSV je izvezen.' : '✅ CSV je sačuvan u Preuzimanja (Downloads).');
 }
 async function gzipB64(text){
   const st = new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'));
