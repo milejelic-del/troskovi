@@ -21,14 +21,14 @@
   --series:#2a78d6; --grid:#e1e0d9; --base:#c3c2b7; --danger:#d03b3b;
   --overlay:rgba(20,20,18,.38); --shadow:0 1px 2px rgba(0,0,0,.05),0 6px 20px rgba(0,0,0,.05);
   --r:16px; color-scheme:light;
-  --c1:#2a78d6; --c2:#eb6834; --c3:#1baf7a; --c4:#eda100; --c5:#e87ba4; --c6:#008300; --c7:#6250d6; --c8:#e34948; --cother:#b4b2a9;
+  --good:#006300; --c1:#2a78d6; --c2:#eb6834; --c3:#1baf7a; --c4:#eda100; --c5:#e87ba4; --c6:#008300; --c7:#6250d6; --c8:#e34948; --cother:#b4b2a9;
 }
 @media (prefers-color-scheme: dark){
   :root{
     --bg:#0d0d0d; --card:#1a1a19; --ink:#f0efec; --ink2:#c3c2b7; --muted:#898781;
     --line:#2c2c2a; --chip:#262624; --accent:#3987e5; --series:#3987e5; --grid:#2c2c2a;
     --base:#383835; --danger:#e66767; --overlay:rgba(0,0,0,.6); --shadow:none; color-scheme:dark;
-    --c1:#3987e5; --c2:#d95926; --c3:#199e70; --c4:#c98500; --c5:#d55181; --c6:#0ca30c; --c7:#9085e9; --c8:#e66767; --cother:#5f5e5a;
+    --good:#0ca30c; --c1:#3987e5; --c2:#d95926; --c3:#199e70; --c4:#c98500; --c5:#d55181; --c6:#0ca30c; --c7:#9085e9; --c8:#e66767; --cother:#5f5e5a;
   }
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -63,6 +63,14 @@ h2{font-size:15px;margin:18px 2px 8px;color:var(--ink2);font-weight:600}
 .tile:active{transform:scale(.96)}
 .tile .ic{font-size:30px;line-height:1}
 .tile .nm{font-size:13px;font-weight:600;line-height:1.15}
+.row .amt.inc{color:var(--good)}
+.tile.inc{--tint:#1baf7a}
+.bud .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.bud .big{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.bud .bar{height:12px;border-radius:6px;background:var(--chip);margin:10px 0 8px;display:flex;overflow:hidden;gap:2px}
+.bud .bar i{display:block;height:100%}
+.bud .over{color:var(--danger)}
+.kseg{display:grid;grid-template-columns:1fr 1fr;width:100%;margin:2px 0 8px}
 .tile.add{--tint:#898781;border-style:dashed;background:transparent}
 
 /* Lists */
@@ -227,6 +235,7 @@ nav.tabs svg{width:24px;height:24px}
       <div><div class="k">Danas</div><div class="v" id="sToday">0</div></div>
       <div><div class="k" id="sMonthLbl">Ovaj mesec</div><div class="v" id="sMonth">0</div></div>
     </div>
+    <div id="budget"></div>
     <div class="tiles" id="tiles"></div>
     <h2>Poslednji unosi</h2>
     <div class="card" id="recent"></div>
@@ -247,6 +256,7 @@ nav.tabs svg{width:24px;height:24px}
 
   <!-- GRAFIKONI -->
   <section class="view" id="v-grafikoni">
+    <div class="seg kseg" id="kMode"><button data-kind="exp">Troškovi</button><button data-kind="inc">Prihodi</button></div>
     <div class="seg pseg" id="pMode" role="tablist" aria-label="Period">
       <button data-pmode="week">Nedelja</button><button data-pmode="month">Mesec</button><button data-pmode="year">Godina</button><button data-pmode="custom">Period</button>
     </div>
@@ -286,8 +296,14 @@ nav.tabs svg{width:24px;height:24px}
       <div class="note">Svaki trošak pamti kurs iz trenutka unosa, pa promena kursa ne menja stare iznose.</div>
     </div>
 
-    <h2>Kategorije</h2>
+    <h2>Mesečni budžet</h2>
+    <div class="card" id="budCard"></div>
+
+    <h2>Kategorije troškova</h2>
     <div class="card" id="catList"></div>
+
+    <h2>Vrste prihoda</h2>
+    <div class="card" id="incList"></div>
 
     <h2>Ponavljajući troškovi</h2>
     <div class="card" id="recList"></div>
@@ -302,7 +318,7 @@ nav.tabs svg{width:24px;height:24px}
       <div class="note">Otvara meni za deljenje telefona; ako ga pregledač ne podržava, fajl ide u Preuzimanja (Downloads).</div>
       <button class="btn" id="bkCsv">📄 Izvezi CSV (za Excel)</button>
       <button class="btn" id="bkCsvIn">📥 Uvezi CSV…</button>
-      <div class="note">CSV treba da ima zaglavlje sa kolonama <b>Datum</b>, <b>Kategorija</b> i <b>Iznos</b>; opciono <b>Podkategorija</b>, <b>Valuta</b> (RSD/EUR), <b>Vreme</b>, <b>Kurs</b>, <b>Napomena</b>. Separator može biti „;“ ili „,“. Nove kategorije se prave same, a već postojeći troškovi se preskaču.</div>
+      <div class="note">CSV treba da ima zaglavlje sa kolonama <b>Datum</b>, <b>Kategorija</b> i <b>Iznos</b>; opciono <b>Tip</b> (Trošak/Prihod), <b>Podkategorija</b>, <b>Valuta</b> (RSD/EUR), <b>Vreme</b>, <b>Kurs</b>, <b>Napomena</b>. Separator može biti „;“ ili „,“. Nove kategorije se prave same, a već postojeći troškovi se preskaču.</div>
       <input type="file" id="csvFile" accept=".csv,.txt,text/csv,text/plain" class="vh">
       <button class="btn" id="bkRestore">↩️ Vrati iz bekapa…</button>
       <input type="file" id="restoreFile" accept=".json,.b64,.txt,application/json,text/plain" class="vh">
@@ -351,6 +367,10 @@ const DEFAULT_CATS = [
   ['ljubimci','Ljubimci','🐾',['Hrana','Veterinar']],
   ['ostalo','Ostalo','📦',[]],
 ];
+const DEFAULT_INC = [
+  ['i-plata','Plata','💼',[]], ['i-honorar','Honorari i dodatni posao','🧑‍💻',[]], ['i-bonus','Bonus','🎯',[]],
+  ['i-poklon','Pokloni','🎁',[]], ['i-kamata','Kamate i investicije','📈',[]], ['i-povrat','Povraćaj novca','↩️',[]], ['i-ostalo','Ostali prihodi','💰',[]],
+];
 const TINTS = ['#2a78d6','#eb6834','#1baf7a','#eda100','#e87ba4','#008300','#6250d6','#e34948'];
 const MONTHS = ['januar','februar','mart','april','maj','jun','jul','avgust','septembar','oktobar','novembar','decembar'];
 const MONTHS_SHORT = ['jan','feb','mar','apr','maj','jun','jul','avg','sep','okt','nov','dec'];
@@ -388,6 +408,8 @@ const val = (it, cur) => cur === 'EUR' ? toEUR(it) : toRSD(it);
 /* ---------- Stanje ---------- */
 function defaultSettings(){
   return { v:1, rate:117.63, display:'RSD', lastCur:'RSD', lastBackup:null, rec:[],
+    budget:{ mode:'off', a:0, c:'RSD', plan:true },
+    incCats: DEFAULT_INC.map(c => ({ id:c[0], name:c[1], icon:c[2], tint:'#1baf7a', hidden:false, subs: c[3].map(n => ({ id:uid(), name:n, hidden:false })) })),
     cats: DEFAULT_CATS.map((c, i) => ({ id:c[0], name:c[1], icon:c[2], tint:TINTS[i % TINTS.length], hidden:false,
       subs: c[3].map(n => ({ id:uid(), name:n, hidden:false })) })) };
 }
@@ -397,11 +419,16 @@ function normSettings(s){
   return { v:1, rate: +s.rate > 0 ? +s.rate : d.rate, display: s.display === 'EUR' ? 'EUR' : 'RSD',
     lastCur: s.lastCur === 'EUR' ? 'EUR' : 'RSD', lastBackup: s.lastBackup || null,
     rec: (Array.isArray(s.rec) ? s.rec : []).filter(r => r && r.id && r.cat && +r.a > 0 && /^\d{4}-\d{2}$/.test(r.start || '')).map(r => ({
-      id:String(r.id), cat:String(r.cat), sub: r.sub ? String(r.sub) : null, a:+r.a, c: r.c === 'EUR' ? 'EUR' : 'RSD', n:String(r.n || ''),
+      id:String(r.id), k: r.k === 'inc' ? 'inc' : undefined, cat:String(r.cat), sub: r.sub ? String(r.sub) : null, a:+r.a, c: r.c === 'EUR' ? 'EUR' : 'RSD', n:String(r.n || ''),
       day: Math.min(31, Math.max(1, +r.day || 1)), start:r.start, lastGen: /^\d{4}-\d{2}$/.test(r.lastGen || '') ? r.lastGen : null, active: r.active !== false })),
-    cats: s.cats.filter(c => c && c.id).map((c, i) => ({ id:String(c.id), name:String(c.name || 'Kategorija'), icon:String(c.icon || '📦'),
+    budget: { mode: ['fixed','income'].includes(s.budget && s.budget.mode) ? s.budget.mode : 'off', a: +(s.budget && s.budget.a) || 0, c: s.budget && s.budget.c === 'EUR' ? 'EUR' : 'RSD', plan: !(s.budget && s.budget.plan === false) },
+    incCats: Array.isArray(s.incCats) ? normCats(s.incCats, '💰') : d.incCats,
+    cats: normCats(s.cats, '📦') };
+}
+function normCats(arr, icon){
+  return arr.filter(c => c && c.id).map((c, i) => ({ id:String(c.id), name:String(c.name || 'Kategorija'), icon:String(c.icon || icon),
       tint: c.tint || TINTS[i % TINTS.length], hidden: !!c.hidden,
-      subs: (Array.isArray(c.subs) ? c.subs : []).filter(x => x && x.id).map(x => ({ id:String(x.id), name:String(x.name || ''), hidden: !!x.hidden })) })) };
+      subs: (Array.isArray(c.subs) ? c.subs : []).filter(x => x && x.id).map(x => ({ id:String(x.id), name:String(x.name || ''), hidden: !!x.hidden })) }));
 }
 function loadLocal(){
   try { const t = localStorage.getItem(LS_KEY); if (t){ const o = JSON.parse(t); const s = normSettings(o.settings); if (s) return { settings:s, months:o.months || {} }; } } catch(e){}
@@ -414,7 +441,11 @@ let S = loadLocal() || { settings: defaultSettings(), months: {} };
 let mode = 'starting';
 const ui = { view:'unos', ym:curYM(), fCat:'', openCat:null, editCat:null };
 
-const cat = id => S.settings.cats.find(c => c.id === id);
+const incCat = id => (S.settings.incCats || []).find(c => c.id === id);
+const cat = id => S.settings.cats.find(c => c.id === id) || incCat(id);
+const isInc = it => it.k === 'inc';
+const isExp = it => it.k !== 'inc';
+const catsOfKind = k => k === 'inc' ? S.settings.incCats : S.settings.cats;
 const subOf = (c, id) => c && id ? c.subs.find(s => s.id === id) : null;
 const visCats = () => S.settings.cats.filter(c => !c.hidden);
 const itemsOf = ym => S.months[ym] || [];
@@ -491,7 +522,7 @@ function route(){
   if (openK && cat(openK)) setTimeout(() => openCategory(openK), 60);
   $$('.view').forEach(v => v.classList.toggle('on', v.id === 'v-' + ui.view));
   $$('nav.tabs a').forEach(a => a.classList.toggle('on', a.dataset.v === ui.view));
-  $('#title').textContent = { unos:'Troškovi', troskovi:'Svi troškovi', grafikoni:'Grafikoni', podesavanja:'Podešavanja' }[ui.view];
+  $('#title').textContent = { unos:'Troškovi', troskovi:'Svi unosi', grafikoni:'Grafikoni', podesavanja:'Podešavanja' }[ui.view];
   window.scrollTo(0, 0);
   render();
 }
@@ -514,11 +545,12 @@ function itemRow(it, showDate){
   return `<button class="row" data-edit="${esc(it.id)}" data-ym="${esc(ymOf(it.d))}" style="--tint:${esc(n.c ? n.c.tint : '#898781')}">
     <span class="ic">${esc(n.icon)}</span>
     <span class="mid"><div class="t1">${esc(n.name)}</div><div class="t2">${esc(t2b || it.t || '')}</div></span>
-    <span class="amt">${esc(fmt(it.a, it.c))}${other ? `<small>≈ ${esc(other)}</small>` : ''}</span></button>`;
+    <span class="amt${isInc(it) ? ' inc' : ''}">${isInc(it) ? '+' : ''}${esc(fmt(it.a, it.c))}${other ? `<small>≈ ${esc(other)}</small>` : ''}</span></button>`;
 }
 function renderHome(){
   const disp = S.settings.display;
-  const m = itemsOf(curYM());
+  const m = itemsOf(curYM()).filter(isExp);
+  renderBudget();
   $('#sToday').textContent = fmt(sumItems(m.filter(i => i.d === today()), disp), disp, true);
   $('#sMonth').textContent = fmt(sumItems(m, disp), disp, true);
   $('#sMonthLbl').textContent = MONTHS[new Date().getMonth()];
@@ -529,11 +561,53 @@ function renderHome(){
       <button class="chip on" id="bkRemind">${dbxConnected() ? 'Dropbox' : GD.clientId ? 'Drive' : 'Podesi'}</button></div>` : '';
   $('#tiles').innerHTML = visCats().map(c =>
     `<button class="tile" data-cat="${esc(c.id)}" style="--tint:${esc(c.tint)}"><span class="ic">${esc(c.icon)}</span><span class="nm">${esc(c.name)}</span></button>`
-  ).join('') + `<button class="tile add" id="tileAdd"><span class="ic">＋</span><span class="nm">Nova kategorija</span></button>`;
+  ).join('') + `<button class="tile inc" id="tileInc"><span class="ic">💰</span><span class="nm">Prihod</span></button><button class="tile add" id="tileAdd"><span class="ic">＋</span><span class="nm">Nova kategorija</span></button>`;
   const recent = allItems().sort(cmpItems).slice(0, 6);
   $('#recent').innerHTML = recent.length ? recent.map(it => itemRow(it, true)).join('') : `<div class="empty">Još nema unosa. Dodirni kategoriju iznad.</div>`;
 }
 const cmpItems = (a, b) => (b.d + (b.t || '')).localeCompare(a.d + (a.t || '')) || (b.ts || 0) - (a.ts || 0);
+
+/* ---------- Budžet do kraja meseca ---------- */
+const conv = (a, c, to) => c === to ? a : to === 'EUR' ? a / S.settings.rate : a * S.settings.rate;
+function budgetInfo(){
+  const b = S.settings.budget || { mode:'off' }; if (b.mode === 'off') return null;
+  const disp = S.settings.display, ym = curYM(), t = today(), items = itemsOf(ym);
+  const spent = sumItems(items.filter(isExp), disp), income = sumItems(items.filter(isInc), disp);
+  let planExp = 0, planInc = 0;
+  if (b.plan) (S.settings.rec || []).filter(R => R.active && R.start <= ym).forEach(R => {
+    if (items.some(i => i.rec === R.id) || recDate(R, ym) <= t) return;
+    const v = conv(R.a, R.c, disp); if (incCat(R.cat)) planInc += v; else planExp += v;
+  });
+  const base = b.mode === 'fixed' ? conv(b.a, b.c, disp) : income + planInc;
+  const [y, m] = ym.split('-').map(Number), dim = new Date(y, m, 0).getDate();
+  const daysLeft = dim - new Date().getDate() + 1;
+  const left = base - spent - planExp;
+  return { b, disp, base, spent, income, planExp, planInc, left, daysLeft, perDay: left / daysLeft };
+}
+function renderBudget(){
+  const el = $('#budget'); if (!el) return;
+  const B = budgetInfo();
+  if (!B){ el.innerHTML = `<button class="card small" id="budSetup" style="display:flex;gap:10px;align-items:center;width:100%;text-align:left;padding:10px 12px">
+      <span style="font-size:20px">🎯</span><span style="flex:1">Postavi mesečni budžet da vidiš koliko ti je ostalo do kraja meseca.</span><span class="chip">Podesi</span></button>`; return; }
+  const d = B.disp, f = v => fmt(v, d, true), over = B.left < 0;
+  const tot = Math.max(B.base, B.spent + B.planExp, 1);
+  const wS = Math.min(100, B.spent / tot * 100), wP = Math.min(100 - wS, B.planExp / tot * 100);
+  const src = B.b.mode === 'income' ? `prihodi ${f(B.income)}${B.planInc ? ' + očekivano ' + f(B.planInc) : ''}` : 'fiksni budžet';
+  el.innerHTML = `<div class="card bud">
+    <div class="top"><span class="small muted">Budžet · ${MONTHS[new Date().getMonth()]}</span><span class="small muted">${esc(f(B.base))}</span></div>
+    <div class="big ${over ? 'over' : ''}">${over ? '⚠️ Prekoračeno ' + esc(f(-B.left)) : 'Preostalo ' + esc(f(B.left))}</div>
+    <div class="bar" role="img" aria-label="Potrošeno ${esc(f(B.spent))} od ${esc(f(B.base))}">
+      <i style="width:${wS.toFixed(1)}%;background:${over ? 'var(--danger)' : 'var(--series)'}"></i>${wP > 0 ? `<i style="width:${wP.toFixed(1)}%;background:var(--series);opacity:.35"></i>` : ''}</div>
+    <div class="small muted">Potrošeno ${esc(f(B.spent))}${B.planExp ? ' · planirano još ' + esc(f(B.planExp)) : ''} · ${esc(src)}</div>
+    <div class="small" style="margin-top:4px">${over ? 'Do kraja meseca: ' + B.daysLeft + ' ' + (B.daysLeft === 1 ? 'dan' : 'dana') : `Još ${B.daysLeft} ${B.daysLeft === 1 ? 'dan' : 'dana'} · možeš da trošiš <b>≈ ${esc(f(B.perDay))}</b> dnevno`}</div>
+  </div>`;
+}
+function openIncomePicker(){
+  const list = (S.settings.incCats || []).filter(c => !c.hidden);
+  openSheet(`<div class="shead"><span class="ic">💰</span><div class="tt">Novi prihod<small>Izaberi vrstu prihoda</small></div><button class="xbtn" data-close>×</button></div>
+    <div class="chips">${list.map(c => `<button class="chip" data-inc-pick="${esc(c.id)}">${esc(c.icon + ' ' + c.name)}</button>`).join('')}
+      <button class="chip ghost" id="incAddCat">＋ Nova vrsta prihoda</button></div>`);
+}
 
 /* ---------- Sheet ---------- */
 let E = null; // stanje unosa
@@ -577,15 +651,15 @@ function openAmount(o){
       <div class="dates"><div class="seg" id="eDay"><button data-day="t">Danas</button><button data-day="y">Juče</button></div><input type="date" class="inp" id="eDate"></div>
     </div>
     <div class="pad" id="pad">${['1','2','3','4','5','6','7','8','9',',','0','⌫'].map(k => `<button data-k="${k}">${k}</button>`).join('')}</div>
-    <button class="btn primary" id="eSave" style="margin-top:12px;padding:15px">${it ? 'Sačuvaj izmene' : 'Sačuvaj trošak'}</button>
-    ${it ? `<button class="btn danger" id="eDel">Obriši trošak</button>` : ''}`);
+    <button class="btn primary" id="eSave" style="margin-top:12px;padding:15px${incCat(E.cat) ? ';background:var(--good)' : ''}">${it ? 'Sačuvaj izmene' : incCat(E.cat) ? 'Sačuvaj prihod' : 'Sačuvaj trošak'}</button>
+    ${it ? `<button class="btn danger" id="eDel">Obriši ${incCat(E.cat) ? 'prihod' : 'trošak'}</button>` : ''}`);
   $('#eNote').value = E.n; $('#eDate').value = E.d;
   if (it) fillEditSelects();
   paintAmount();
 }
 function fillEditSelects(){
   const cs = $('#eCat'), ss = $('#eSub'); if (!cs) return;
-  const list = S.settings.cats.filter(c => !c.hidden || c.id === E.cat);
+  const list = catsOfKind(incCat(E.cat) ? 'inc' : 'exp').filter(c => !c.hidden || c.id === E.cat);
   cs.innerHTML = list.map(c => `<option value="${esc(c.id)}">${esc(c.icon + ' ' + c.name)}</option>`).join('');
   cs.value = E.cat;
   const c = cat(E.cat);
@@ -626,9 +700,10 @@ function saveEntry(){
   const item = { id: E.editId || uid(), d, t: E.t || nowTime(), a: v, c: E.cur, r: E.r || S.settings.rate,
     cat: E.cat, sub: E.sub || null, n: $('#eNote').value.trim(), ts: E.ts || Date.now() };
   if (E.rec) item.rec = E.rec;
+  if (incCat(item.cat)) item.k = 'inc';
   const ym = ymOf(d);
   if (!E.editId && E.rep){
-    const R = { id:'r' + uid(), cat:item.cat, sub:item.sub, a:item.a, c:item.c, n:item.n, day:+d.slice(8), start:ym, lastGen:ym, active:true };
+    const R = { id:'r' + uid(), k:item.k, cat:item.cat, sub:item.sub, a:item.a, c:item.c, n:item.n, day:+d.slice(8), start:ym, lastGen:ym, active:true };
     S.settings.rec.push(R); item.rec = R.id; persistSettings();
   }
   if (E.editId && E.origYM){
@@ -640,12 +715,12 @@ function saveEntry(){
   if (!E.editId && S.settings.lastCur !== E.cur){ S.settings.lastCur = E.cur; persistSettings(); }
   const wasEdit = !!E.editId;
   closeSheet(); render();
-  toast(wasEdit ? 'Izmenjeno' : item.rec ? `Sačuvano i ponavlja se ${item.d.slice(8).replace(/^0/, '')}. u mesecu` : `Sačuvano: ${fmt(v, item.c)}`);
+  toast(wasEdit ? 'Izmenjeno' : item.k === 'inc' && !item.rec ? `Prihod sačuvan: +${fmt(v, item.c)}` : item.rec ? `Sačuvano i ponavlja se ${item.d.slice(8).replace(/^0/, '')}. u mesecu` : `Sačuvano: ${fmt(v, item.c)}`);
   if (item.rec) genRecurring();
 }
 async function deleteEntry(){
   const id = E.editId, ym = E.origYM;
-  if (!(await confirmBox('Obrisati ovaj trošak?', 'Obriši'))) return;
+  if (!(await confirmBox(incCat(E.cat) ? 'Obrisati ovaj prihod?' : 'Obrisati ovaj trošak?', 'Obriši'))) return;
   S.months[ym] = itemsOf(ym).filter(x => x.id !== id);
   persistMonth(ym); closeSheet(); render(); toast('Obrisano');
 }
@@ -656,6 +731,14 @@ document.addEventListener('click', async e => {
   const t = e.target.closest('button,a'); if (!t) return;
   if (t.dataset.close !== undefined) return closeSheet();
   if (t.dataset.cat && t.classList.contains('tile')) return openCategory(t.dataset.cat);
+  if (t.id === 'tileInc') return openIncomePicker();
+  if (t.dataset.incPick) return openCategory(t.dataset.incPick);
+  if (t.id === 'incAddCat'){ closeSheet(); location.hash = '#podesavanja'; setTimeout(() => { const i = $('#newIncName'); if (i){ i.scrollIntoView({block:'center'}); i.focus(); } }, 60); return; }
+  if (t.id === 'budSetup'){ location.hash = '#podesavanja'; setTimeout(() => { const b = $('#budCard'); if (b) b.scrollIntoView({block:'start'}); }, 60); return; }
+  if (t.dataset.bmode){ S.settings.budget.mode = t.dataset.bmode; persistSettings(); return renderSettings(); }
+  if (t.dataset.bcur){ S.settings.budget.c = t.dataset.bcur; persistSettings(); return renderSettings(); }
+  if (t.dataset.kind){ ui.kind = t.dataset.kind; ui.openCat = null; ui.pieSel = null; ui.pieCat = null; return renderCharts(); }
+  if (t.id === 'newIncSave') return addCat('inc');
   if (t.id === 'tileAdd'){ location.hash = '#podesavanja'; setTimeout(() => { const i = $('#newCatName'); if (i){ i.scrollIntoView({block:'center'}); i.focus(); } }, 50); return; }
   if (t.dataset.pickSub !== undefined){ const cid = $('#sheetIn').dataset.cat; return openAmount({ cat:cid, sub:t.dataset.pickSub || null }); }
   if (t.id === 'newSubBtn'){ $('#newSubRow').hidden = false; $('#newSubInp').focus(); return; }
@@ -688,7 +771,7 @@ document.addEventListener('click', async e => {
   if (t.dataset.subAdd){ const c = cat(t.dataset.subAdd); const inp = $('#subAdd-' + c.id); if (addSub(c, inp.value)){ inp.value = ''; renderSettings(); } return; }
   if (t.dataset.catHide){ return hideCat(t.dataset.catHide); }
   if (t.dataset.catShow){ const c = cat(t.dataset.catShow); c.hidden = false; persistSettings(); return renderSettings(); }
-  if (t.id === 'newCatSave') return addCat();
+  if (t.id === 'newCatSave') return addCat('exp');
   if (t.id === 'bkRemind'){ location.hash = '#podesavanja'; return dbxConnected() ? dbxBackup(false) : GD.clientId ? gdRun('backup') : undefined; }
   if (t.id === 'dbxStartBtn') return dbxStart();
   if (t.id === 'gdSaveBtn'){ const v = ($('#gdClient').value || '').trim(); if (!/\.apps\.googleusercontent\.com$/.test(v)){ bkStatus('Client ID treba da se završava na „.apps.googleusercontent.com“.'); return; } GD = { clientId:v }; gdSave(); renderDrive(); bkStatus('Google Drive je podešen — dodirni „Bekap na Google Drive sada“.'); return; }
@@ -721,12 +804,15 @@ document.addEventListener('change', e => {
   else if (t.dataset.catIcon){ const c = cat(t.dataset.catIcon); const v = t.value.trim(); if (v && v !== c.icon){ c.icon = v; persistSettings(); renderSettings(); } }
   else if (t.dataset.subName){ const c = cat(t.dataset.catId); const s = subOf(c, t.dataset.subName); const v = t.value.trim(); if (s && v && v !== s.name){ s.name = v; persistSettings(); } }
   else if (t.id === 'restoreFile'){ const f = t.files && t.files[0]; t.value = ''; if (f) restoreFrom(f); }
+  else if (t.id === 'budAmt'){ const v = parseNum(t.value); S.settings.budget.a = v > 0 ? Math.round(v * 100) / 100 : 0; persistSettings(); renderSettings(); }
+  else if (t.id === 'budPlan'){ S.settings.budget.plan = t.checked; persistSettings(); }
   else if (t.id === 'dbxAuto'){ DBXS.auto = t.checked; dbxSave(); }
   else if (t.id === 'csvFile'){ const f = t.files && t.files[0]; t.value = ''; if (f) csvImport(f); }
 });
 document.addEventListener('keydown', e => {
   if (e.key === 'Enter' && e.target.id === 'newSubInp'){ e.preventDefault(); $('#newSubSave').click(); }
-  if (e.key === 'Enter' && e.target.id === 'newCatName'){ e.preventDefault(); addCat(); }
+  if (e.key === 'Enter' && e.target.id === 'newCatName'){ e.preventDefault(); addCat('exp'); }
+  if (e.key === 'Enter' && e.target.id === 'newIncName'){ e.preventDefault(); addCat('inc'); }
   if (e.key === 'Enter' && e.target.id && e.target.id.startsWith('subAdd-')){ e.preventDefault(); const b = e.target.parentNode.querySelector('[data-sub-add]'); if (b) b.click(); }
   if (E && $('#sheet').classList.contains('on') && document.activeElement && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)){
     if (/^[0-9]$/.test(e.key)) keyPress(e.key); else if (e.key === ',' || e.key === '.') keyPress(','); else if (e.key === 'Backspace') keyPress('⌫'); else if (e.key === 'Enter') saveEntry();
@@ -743,18 +829,21 @@ function renderList(){
   renderMonthNav();
   const fc = $('#fCat');
   const used = new Set(itemsOf(ui.ym).map(i => i.cat));
-  const opts = S.settings.cats.filter(c => !c.hidden || used.has(c.id));
-  fc.innerHTML = `<option value="">Sve kategorije</option>` + opts.map(c => `<option value="${esc(c.id)}">${esc(c.icon + ' ' + c.name)}</option>`).join('');
+  const opt = c => `<option value="${esc(c.id)}">${esc(c.icon + ' ' + c.name)}</option>`;
+  fc.innerHTML = `<option value="">Sve (troškovi i prihodi)</option><option value="__exp">Samo troškovi</option><option value="__inc">Samo prihodi</option>`
+    + `<optgroup label="Troškovi">${S.settings.cats.filter(c => !c.hidden || used.has(c.id)).map(opt).join('')}</optgroup>`
+    + `<optgroup label="Prihodi">${S.settings.incCats.filter(c => !c.hidden || used.has(c.id)).map(opt).join('')}</optgroup>`;
   fc.value = ui.fCat; if (fc.value !== ui.fCat){ ui.fCat = ''; fc.value = ''; }
-  const items = itemsOf(ui.ym).filter(i => !ui.fCat || i.cat === ui.fCat).slice().sort(cmpItems);
+  const items = itemsOf(ui.ym).filter(i => !ui.fCat || (ui.fCat === '__exp' ? isExp(i) : ui.fCat === '__inc' ? isInc(i) : i.cat === ui.fCat)).slice().sort(cmpItems);
+  const dayTot = arr => { const e = sumItems(arr.filter(isExp), disp), n = sumItems(arr.filter(isInc), disp); return [e ? '−' + fmt(e, disp, true) : '', n ? '+' + fmt(n, disp, true) : ''].filter(Boolean).join(' · '); };
   const disp = S.settings.display;
   if (!items.length){ $('#list').innerHTML = `<div class="card empty">Nema troškova za ${esc(ymLabel(ui.ym))}.</div>`; return; }
-  const total = sumItems(items, disp);
-  let html = `<div class="dayhead" style="margin-top:4px"><span>${items.length} unosa</span><span>Ukupno ${esc(fmt(total, disp, true))}</span></div>`;
+  const tE = sumItems(items.filter(isExp), disp), tI = sumItems(items.filter(isInc), disp);
+  let html = `<div class="dayhead" style="margin-top:4px"><span>${items.length} unosa</span><span>${tE ? 'Troškovi ' + esc(fmt(tE, disp, true)) : ''}${tE && tI ? ' · ' : ''}${tI ? '<span style="color:var(--good)">Prihodi ' + esc(fmt(tI, disp, true)) + '</span>' : ''}</span></div>`;
   const byDay = {};
   items.forEach(i => (byDay[i.d] = byDay[i.d] || []).push(i));
   Object.keys(byDay).sort().reverse().forEach(d => {
-    html += `<div class="dayhead"><span>${esc(dayLabel(d))}</span><span>${esc(fmt(sumItems(byDay[d], disp), disp, true))}</span></div>
+    html += `<div class="dayhead"><span>${esc(dayLabel(d))}</span><span>${esc(dayTot(byDay[d]))}</span></div>
       <div class="card" style="padding:4px 14px">${byDay[d].map(i => itemRow(i, false)).join('')}</div>`;
   });
   $('#list').innerHTML = html;
@@ -846,10 +935,16 @@ function renderCharts(){
   const disp = S.settings.display, p = ui.p;
   const r = periodRange(p);
   renderPeriodControls(r);
-  const items = itemsIn(r);
+  ui.kind = ui.kind || 'exp';
+  const KF = ui.kind === 'inc' ? isInc : isExp;
+  $$('#kMode button').forEach(b => b.classList.toggle('on', b.dataset.kind === ui.kind));
+  const allR = itemsIn(r), items = allR.filter(KF);
   const total = sumItems(items, disp);
   const pr = prevRange(p, r);
-  const prev = sumItems(itemsIn(pr), disp);
+  const prev = sumItems(itemsIn(pr).filter(KF), disp);
+  const oTot = sumItems(allR.filter(ui.kind === 'inc' ? isExp : isInc), disp);
+  const net = ui.kind === 'inc' ? total - oTot : oTot - total;
+  const balance = oTot || ui.kind === 'inc' ? `${ui.kind === 'inc' ? 'Troškovi' : 'Prihodi'} ${fmt(oTot, disp, true)} · Bilans ${net >= 0 ? '+' : '−'}${fmt(Math.abs(net), disp, true)}` : '';
   const span = diffDays(r.from, r.to) + 1;
   const lastDay = r.to < today() ? r.to : today();
   const elapsed = Math.max(1, diffDays(r.from, lastDay) + 1);
@@ -861,6 +956,7 @@ function renderCharts(){
   $('#hero').innerHTML = `<div class="small muted">${esc(rangeLabel(p, r))} · ${span} ${span === 1 ? 'dan' : 'dana'}</div>
     <div class="big">${esc(fmt(total, disp, true))}</div>
     <div class="sub">${esc(delta || other)}</div>
+    ${balance ? `<div class="sub" style="margin-top:2px">${esc(balance)}</div>` : ''}
     <div class="kpis"><div><div class="k">Unosa</div><div class="v">${nfRSD0.format(items.length)}</div></div>
       <div><div class="k">${perMonth ? 'Prosek/mes' : 'Prosek/dan'}</div><div class="v">${esc(compact(avg))}</div></div>
       <div><div class="k">Najviše</div><div class="v">${esc(topCatName(items, disp))}</div></div></div>`;
@@ -870,7 +966,7 @@ function renderCharts(){
   items.forEach(i => { const k = i.cat; byCat[k] = byCat[k] || { v:0, subs:{} }; const x = val(i, disp); byCat[k].v += x; const sk = i.sub || '_'; byCat[k].subs[sk] = (byCat[k].subs[sk] || 0) + x; });
   const rows = Object.entries(byCat).sort((a, b) => b[1].v - a[1].v);
   $$('#catView button').forEach(x => x.classList.toggle('on', x.dataset.cview === ui.catView));
-  if (!rows.length){ $('#byCat').innerHTML = `<div class="empty">Nema troškova u izabranom periodu.</div>`; }
+  if (!rows.length){ $('#byCat').innerHTML = `<div class="empty">Nema ${ui.kind === 'inc' ? 'prihoda' : 'troškova'} u izabranom periodu.</div>`; }
   else if (ui.catView === 'pie') renderPie(byCat, rows, total, disp);
   else {
     const max = rows[0][1].v;
@@ -900,7 +996,7 @@ function renderCharts(){
   $('#trendSec').hidden = p.mode !== 'month';
   if (p.mode === 'month'){
     const ym0 = r.from.slice(0, 7), ms = [];
-    for (let k = 11; k >= 0; k--){ const ym = shiftYM(ym0, -k); ms.push({ v: sumItems(itemsOf(ym), disp), label: MONTHS_SHORT[+ym.slice(5) - 1], tip: ymLabel(ym) }); }
+    for (let k = 11; k >= 0; k--){ const ym = shiftYM(ym0, -k); ms.push({ v: sumItems(itemsOf(ym).filter(KF), disp), label: MONTHS_SHORT[+ym.slice(5) - 1], tip: ymLabel(ym) }); }
     barChart($('#chMonths'), ms, disp);
   }
 }
@@ -1008,7 +1104,24 @@ function renderSettings(){
   const st = S.settings;
   $$('#dispSeg button').forEach(b => b.classList.toggle('on', b.dataset.cur === st.display));
   if (document.activeElement !== $('#rateInp')) $('#rateInp').value = nfRSD.format(st.rate).replace(/\./g, '');
-  const vis = st.cats.filter(c => !c.hidden), hid = st.cats.filter(c => c.hidden);
+  $('#catList').innerHTML = catEditorHTML(st.cats, 'exp');
+  $('#incList').innerHTML = catEditorHTML(st.incCats, 'inc');
+  renderBudgetSettings();
+
+  renderRecList();
+  renderDropbox();
+  renderDrive();
+  renderStoreInfo();
+  $('#lastBk').textContent = st.lastBackup ? 'Poslednji bekap: ' + new Date(st.lastBackup).toLocaleString('sr-Latn-RS') : 'Bekap još nije napravljen.';
+}
+function renderStoreInfo(){
+  const el = $('#storeInfo'); if (!el) return;
+  el.innerHTML = mode === 'starting' ? 'Učitavanje…'
+    : idb ? '📱 Troškovi se čuvaju <b>samo na ovom telefonu</b> i ne šalju se nigde. ' + (persisted ? 'Trajno čuvanje je uključeno.' : 'Dodaj aplikaciju na početni ekran da pregledač ne bi obrisao podatke.') + ' Redovno pravi bekap.'
+    : '⚠️ Ovaj pregledač ne dozvoljava trajno čuvanje (npr. privatni režim). Napravi bekap pre zatvaranja.';
+}
+function catEditorHTML(list, kind){
+  const vis = list.filter(c => !c.hidden), hid = list.filter(c => c.hidden);
   let h = vis.map((c, i) => {
     const subs = c.subs.filter(s => !s.hidden);
     let r = `<div class="catrow"><span style="font-size:22px">${esc(c.icon)}</span>
@@ -1028,23 +1141,21 @@ function renderSettings(){
     }
     return r;
   }).join('');
-  h += `<div class="addsub" style="margin-top:14px"><input class="inp" id="newCatIcon" placeholder="🙂" maxlength="4" style="width:58px;text-align:center"><input class="inp" id="newCatName" placeholder="Nova kategorija" maxlength="30"><button class="btn primary" id="newCatSave">Dodaj</button></div>`;
+  h += `<div class="addsub" style="margin-top:14px">${kind === 'inc' ? `<input class="inp" id="newIncIcon" placeholder="💰" maxlength="4" style="width:58px;text-align:center"><input class="inp" id="newIncName" placeholder="Nova vrsta prihoda" maxlength="30"><button class="btn primary" id="newIncSave">Dodaj</button>` : `<input class="inp" id="newCatIcon" placeholder="🙂" maxlength="4" style="width:58px;text-align:center"><input class="inp" id="newCatName" placeholder="Nova kategorija" maxlength="30"><button class="btn primary" id="newCatSave">Dodaj</button>`}</div>`;
   if (hid.length) h += `<div class="small muted" style="margin:14px 0 6px">Uklonjene kategorije (stari troškovi ostaju u izveštajima)</div><div class="chips">${hid.map(c => `<button class="chip ghost" data-cat-show="${esc(c.id)}">${esc(c.icon + ' ' + c.name)} · vrati</button>`).join('')}</div>`;
-  $('#catList').innerHTML = h;
-  renderRecList();
-  renderDropbox();
-  renderDrive();
-  renderStoreInfo();
-  $('#lastBk').textContent = st.lastBackup ? 'Poslednji bekap: ' + new Date(st.lastBackup).toLocaleString('sr-Latn-RS') : 'Bekap još nije napravljen.';
+  return h;
 }
-function renderStoreInfo(){
-  const el = $('#storeInfo'); if (!el) return;
-  el.innerHTML = mode === 'starting' ? 'Učitavanje…'
-    : idb ? '📱 Troškovi se čuvaju <b>samo na ovom telefonu</b> i ne šalju se nigde. ' + (persisted ? 'Trajno čuvanje je uključeno.' : 'Dodaj aplikaciju na početni ekran da pregledač ne bi obrisao podatke.') + ' Redovno pravi bekap.'
-    : '⚠️ Ovaj pregledač ne dozvoljava trajno čuvanje (npr. privatni režim). Napravi bekap pre zatvaranja.';
+function renderBudgetSettings(){
+  const b = S.settings.budget, el = $('#budCard'); if (!el) return;
+  el.innerHTML = `<div class="seg" style="display:grid;grid-template-columns:repeat(3,1fr);width:100%">
+      <button data-bmode="off" class="${b.mode === 'off' ? 'on' : ''}">Isključen</button><button data-bmode="fixed" class="${b.mode === 'fixed' ? 'on' : ''}">Fiksni iznos</button><button data-bmode="income" class="${b.mode === 'income' ? 'on' : ''}">Prihodi</button></div>
+    ${b.mode === 'fixed' ? `<div class="dates" style="margin-top:10px"><input class="inp" id="budAmt" inputmode="decimal" placeholder="Mesečni budžet" value="${b.a ? esc(nfRSD.format(b.a)) : ''}" style="font-weight:700">
+      <div class="seg"><button data-bcur="RSD" class="${b.c === 'RSD' ? 'on' : ''}">RSD</button><button data-bcur="EUR" class="${b.c === 'EUR' ? 'on' : ''}">EUR</button></div></div>` : ''}
+    ${b.mode !== 'off' ? `<label class="setrow" style="margin-top:6px"><span class="small">Uračunaj ponavljajuće troškove${b.mode === 'income' ? ' i prihode' : ''} koji tek dolaze ovog meseca</span><input type="checkbox" id="budPlan" style="width:22px;height:22px;flex:none" ${b.plan ? 'checked' : ''}></label>` : ''}
+    <div class="note">${b.mode === 'income' ? 'Budžet = svi prihodi uneti u ovom mesecu (npr. plata). Na početnom ekranu vidiš koliko je ostalo i koliko dnevno smeš da trošiš do kraja meseca.' : b.mode === 'fixed' ? 'Isti iznos za svaki mesec. Na početnom ekranu vidiš koliko je ostalo i koliko dnevno smeš da trošiš do kraja meseca.' : 'Uključi budžet da na početnom ekranu pratiš koliko ti je ostalo do kraja meseca.'}</div>`;
 }
 function moveCat(id, k){
-  const a = S.settings.cats; const vis = a.filter(c => !c.hidden);
+  const a = incCat(id) ? S.settings.incCats : S.settings.cats; const vis = a.filter(c => !c.hidden);
   const i = vis.findIndex(c => c.id === id), j = i + k; if (j < 0 || j >= vis.length) return;
   const ai = a.indexOf(vis[i]), aj = a.indexOf(vis[j]); [a[ai], a[aj]] = [a[aj], a[ai]];
   persistSettings(); renderSettings();
@@ -1059,12 +1170,13 @@ async function hideCat(cid){
   if (!(await confirmBox(`Ukloniti kategoriju „${c.name}“? Postojeći troškovi ostaju u izveštajima, a kategoriju možeš vratiti.`, 'Ukloni'))) return;
   c.hidden = true; ui.editCat = null; persistSettings(); renderSettings();
 }
-function addCat(){
-  const name = $('#newCatName').value.trim(); if (!name){ $('#newCatName').focus(); return; }
-  const icon = $('#newCatIcon').value.trim() || '🏷️';
-  const i = S.settings.cats.length;
-  const c = { id:'c' + uid(), name, icon, tint:TINTS[i % TINTS.length], hidden:false, subs:[] };
-  S.settings.cats.push(c); ui.editCat = c.id; persistSettings(); renderSettings(); toast('Kategorija dodata');
+function addCat(kind){
+  const inc = kind === 'inc', ni = $(inc ? '#newIncName' : '#newCatName');
+  const name = ni.value.trim(); if (!name){ ni.focus(); return; }
+  const icon = $(inc ? '#newIncIcon' : '#newCatIcon').value.trim() || (inc ? '💰' : '🏷️');
+  const list = catsOfKind(kind), i = list.length;
+  const c = { id:(inc ? 'i' : 'c') + uid(), name, icon, tint: inc ? '#1baf7a' : TINTS[i % TINTS.length], hidden:false, subs:[] };
+  list.push(c); ui.editCat = c.id; persistSettings(); renderSettings(); toast(inc ? 'Vrsta prihoda dodata' : 'Kategorija dodata');
 }
 
 /* ---------- Bekap ---------- */
@@ -1099,10 +1211,10 @@ async function fileBackup(){
 }
 async function csvExport(){
   const q = s => '"' + String(s ?? '').replace(/"/g, '""') + '"';
-  const lines = [['Datum','Vreme','Kategorija','Podkategorija','Iznos','Valuta','Iznos RSD','Iznos EUR','Kurs','Napomena'].join(';')];
+  const lines = [['Datum','Vreme','Tip','Kategorija','Podkategorija','Iznos','Valuta','Iznos RSD','Iznos EUR','Kurs','Napomena'].join(';')];
   allItems().sort((a, b) => -cmpItems(a, b)).forEach(it => {
     const n = catName(it);
-    lines.push([it.d, it.t || '', q(n.name), q(n.sub), String(it.a).replace('.', ','), it.c, toRSD(it).toFixed(2).replace('.', ','), toEUR(it).toFixed(2).replace('.', ','), String(it.r).replace('.', ','), q(it.n)].join(';'));
+    lines.push([it.d, it.t || '', isInc(it) ? 'Prihod' : 'Trošak', q(n.name), q(n.sub), String(it.a).replace('.', ','), it.c, toRSD(it).toFixed(2).replace('.', ','), toEUR(it).toFixed(2).replace('.', ','), String(it.r).replace('.', ','), q(it.n)].join(';'));
   });
   const r = await shareOrDownload('troskovi-' + stamp() + '.csv', '﻿' + lines.join('\r\n'), 'text/csv');
   bkStatus(r === 'cancel' ? 'Izvoz je otkazan.' : r === 'shared' ? '✅ CSV je izvezen.' : '✅ CSV je sačuvan u Preuzimanja (Downloads).');
@@ -1390,6 +1502,7 @@ const COLS = {
   c:['valuta','currency','cur'],
   r:['kurs','rate','exchange rate'],
   icon:['ikona','icon','emoji'],
+  k:['tip','type','vrsta','kind'],
   n:['napomena','note','notes','opis','description','komentar','memo'],
 };
 function mapHeader(h){
@@ -1414,7 +1527,7 @@ function parseNum(s){
   return parseFloat(s);
 }
 function parseCur(s){ const v = norm(s); if (!v) return 'RSD'; if (/eur|€/.test(v)) return 'EUR'; if (/rsd|din/.test(v)) return 'RSD'; return null; }
-const itemKey = it => [it.d, Math.round(it.a * 100), it.c, it.cat, it.sub || '', norm(it.n)].join('|');
+const itemKey = it => [it.k === 'inc' ? 'I' : '', it.d, Math.round(it.a * 100), it.c, it.cat, it.sub || '', norm(it.n)].join('|');
 
 async function csvImport(file){
   let rows;
@@ -1425,12 +1538,12 @@ async function csvImport(file){
   if (missing.length){ bkStatus('U zaglavlju nedostaje: ' + missing.join(', ') + '. Pronađene kolone: ' + rows[0].join(', ')); return; }
 
   // Radna kopija kategorija — menja se tek posle potvrde.
-  const cats = clone(S.settings.cats);
+  const cats = clone(S.settings.cats), incs = clone(S.settings.incCats);
   const newCats = [], newSubs = [];
-  const findCat = (name, icon) => {
-    const k = norm(name) || 'ostalo';
-    let c = cats.find(x => norm(x.name) === k) || cats.find(x => x.id === k);
-    if (!c){ c = { id:'c' + uid(), name: String(name).trim() || 'Ostalo', icon: String(icon || '').trim().slice(0, 4) || '🏷️', tint:TINTS[cats.length % TINTS.length], hidden:false, subs:[] }; cats.push(c); newCats.push(c.name); }
+  const findCat = (name, icon, inc) => {
+    const L = inc ? incs : cats, k = norm(name) || (inc ? 'ostali prihodi' : 'ostalo');
+    let c = L.find(x => norm(x.name) === k) || L.find(x => x.id === k);
+    if (!c){ c = { id:(inc ? 'i' : 'c') + uid(), name: String(name).trim() || (inc ? 'Ostali prihodi' : 'Ostalo'), icon: String(icon || '').trim().slice(0, 4) || (inc ? '💰' : '🏷️'), tint: inc ? '#1baf7a' : TINTS[L.length % TINTS.length], hidden:false, subs:[] }; L.push(c); newCats.push(c.name); }
     return c;
   };
   const findSub = (c, name) => {
@@ -1448,10 +1561,12 @@ async function csvImport(file){
     if (!d){ bad.push(line + ' (datum)'); return; }
     if (!(a > 0)){ bad.push(line + ' (iznos)'); return; }
     if (!c){ bad.push(line + ' (valuta)'); return; }
-    const cc = findCat(g('cat'), g('icon')); const ss = findSub(cc, g('sub'));
+    const inc = /prihod|income|uplata|priliv|^\+$/i.test(g('k'));
+    const cc = findCat(g('cat'), g('icon'), inc); const ss = findSub(cc, g('sub'));
     const rr = parseNum(g('r'));
     const tm = (g('t').match(/^(\d{1,2}):(\d{2})/) || []);
     const it = { id:uid(), d, t: tm[0] ? pad2(tm[1]) + ':' + tm[2] : '12:00', a, c, r: rr > 1 ? rr : S.settings.rate, cat:cc.id, sub: ss ? ss.id : null, n: g('n').slice(0, 80), ts: Date.now() + i };
+    if (inc) it.k = 'inc';
     const key = itemKey(it);
     const left = existing.get(key) || 0;
     if (left > 0){ existing.set(key, left - 1); dup++; return; }
@@ -1460,14 +1575,15 @@ async function csvImport(file){
 
   if (!add.length){ bkStatus(`Nema novih troškova za uvoz${dup ? ` (${dup} već postoji)` : ''}${bad.length ? `; neispravni redovi: ${bad.slice(0, 8).join(', ')}` : ''}.`); return; }
   const total = add.reduce((s, it) => s + toRSD(it), 0);
-  let msg = `Uvesti ${add.length} troškova (ukupno ${fmt(total, 'RSD', true)})?`;
+  const nInc = add.filter(isInc).length;
+  let msg = nInc ? `Uvesti ${add.length - nInc} troškova i ${nInc} prihoda?` : `Uvesti ${add.length} troškova (ukupno ${fmt(total, 'RSD', true)})?`;
   if (dup) msg += ` ${dup} već postoji i biće preskočeno.`;
   if (bad.length) msg += ` Neispravni redovi se preskaču: ${bad.slice(0, 6).join(', ')}${bad.length > 6 ? '…' : ''}.`;
   if (newCats.length) msg += ` Nove kategorije: ${newCats.slice(0, 6).join(', ')}${newCats.length > 6 ? '…' : ''}.`;
   else if (newSubs.length) msg += ` Nove podkategorije: ${newSubs.length}.`;
   if (!(await confirmBox(msg, 'Uvezi'))) { bkStatus('Uvoz je otkazan.'); return; }
 
-  S.settings.cats = cats;
+  S.settings.cats = cats; S.settings.incCats = incs;
   if (newCats.length || newSubs.length) persistSettings();
   const touched = new Set();
   add.forEach(it => { const ym = ymOf(it.d); (S.months[ym] = S.months[ym] || []).push(it); touched.add(ym); });
@@ -1491,7 +1607,9 @@ function genRecurring(){
       while (ym <= cur && guard++ < 600){
         const d = recDate(R, ym); if (d > t) break;
         if (!itemsOf(ym).some(i => i.rec === R.id)){
-          S.months[ym] = itemsOf(ym).concat({ id:uid(), d, t:'09:00', a:R.a, c:R.c, r:S.settings.rate, cat:R.cat, sub:R.sub || null, n:R.n || '', rec:R.id, ts:Date.now() }).sort(cmpItems);
+          const it = { id:uid(), d, t:'09:00', a:R.a, c:R.c, r:S.settings.rate, cat:R.cat, sub:R.sub || null, n:R.n || '', rec:R.id, ts:Date.now() };
+          if (incCat(R.cat)) it.k = 'inc';
+          S.months[ym] = itemsOf(ym).concat(it).sort(cmpItems);
           touched.add(ym); added++;
         }
         R.lastGen = ym; changed = true; ym = shiftYM(ym, 1);
@@ -1507,15 +1625,16 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 function renderRecList(){
   const el = $('#recList'); if (!el) return;
   const disp = S.settings.display, list = S.settings.rec || [];
-  const monthly = list.filter(R => R.active).reduce((t, R) => t + (R.c === disp ? R.a : disp === 'EUR' ? R.a / S.settings.rate : R.a * S.settings.rate), 0);
-  el.innerHTML = (list.length ? `<div class="small muted" style="margin-bottom:4px">Aktivno mesečno: <b style="color:var(--ink)">${esc(fmt(monthly, disp, true))}</b></div>` : '')
+  const mE = list.filter(R => R.active && !incCat(R.cat)).reduce((t, R) => t + conv(R.a, R.c, disp), 0);
+  const mI = list.filter(R => R.active && incCat(R.cat)).reduce((t, R) => t + conv(R.a, R.c, disp), 0);
+  el.innerHTML = (list.length ? `<div class="small muted" style="margin-bottom:4px">Mesečno: troškovi <b style="color:var(--ink)">${esc(fmt(mE, disp, true))}</b>${mI ? ` · prihodi <b style="color:var(--good)">${esc(fmt(mI, disp, true))}</b>` : ''}</div>` : '')
     + list.map(R => {
       const c = cat(R.cat), sb = subOf(c, R.sub);
       const nm = (c ? c.name : 'Nepoznato') + (sb ? ' › ' + sb.name : '');
       const when = R.active ? `${R.day}. u mesecu · sledeći ${shortDate(recNext(R), true)}` : 'pauzirano';
       return `<div class="catrow" style="${R.active ? '' : 'opacity:.55'}"><span style="font-size:22px">${esc(c ? c.icon : '🔁')}</span>
         <div class="nm">${esc(nm)}<small>${esc(when)}${R.n ? ' · ' + esc(R.n) : ''}</small></div>
-        <span style="font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap">${esc(fmt(R.a, R.c))}</span>
+        <span style="font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;${incCat(R.cat) ? 'color:var(--good)' : ''}">${incCat(R.cat) ? '+' : ''}${esc(fmt(R.a, R.c))}</span>
         <button class="mini" data-rec-edit="${esc(R.id)}" aria-label="Uredi">✎</button></div>`;
     }).join('')
     + (list.length ? '' : `<div class="small muted">Nema ponavljajućih troškova. Uključi „🔁 Ponavlja se svakog meseca“ pri unosu troška ili dodaj ovde.</div>`)
@@ -1526,7 +1645,7 @@ function openRecEditor(id){
   const R0 = id ? (S.settings.rec || []).find(r => r.id === id) : null;
   const firstCat = visCats()[0];
   RE = R0 ? clone(R0) : { id:null, cat: firstCat ? firstCat.id : 'ostalo', sub:null, a:0, c:S.settings.lastCur || 'RSD', n:'', day:new Date().getDate(), start:curYM(), lastGen:null, active:true };
-  openSheet(`<div class="shead"><span class="ic">🔁</span><div class="tt">${R0 ? 'Ponavljajući trošak' : 'Novi ponavljajući trošak'}<small>Dodaje se automatski svakog meseca</small></div><button class="xbtn" data-close>×</button></div>
+  openSheet(`<div class="shead"><span class="ic">🔁</span><div class="tt">${R0 ? 'Ponavljajući trošak' : 'Novi ponavljajući trošak'}<small>Trošak ili prihod (npr. plata) koji se dodaje svakog meseca</small></div><button class="xbtn" data-close>×</button></div>
     <div class="cats-sel"><select class="inp" id="rCat"></select><select class="inp" id="rSub"></select></div>
     <div class="fields">
       <div class="dates"><input class="inp" id="rAmt" inputmode="decimal" placeholder="Iznos" style="font-size:20px;font-weight:700">
@@ -1546,7 +1665,8 @@ function openRecEditor(id){
 }
 function fillRecSelects(){
   const cs = $('#rCat'), ss = $('#rSub');
-  cs.innerHTML = S.settings.cats.filter(c => !c.hidden || c.id === RE.cat).map(c => `<option value="${esc(c.id)}">${esc(c.icon + ' ' + c.name)}</option>`).join('');
+  const o = c => `<option value="${esc(c.id)}">${esc(c.icon + ' ' + c.name)}</option>`;
+  cs.innerHTML = `<optgroup label="Troškovi">${S.settings.cats.filter(c => !c.hidden || c.id === RE.cat).map(o).join('')}</optgroup><optgroup label="Prihodi">${S.settings.incCats.filter(c => !c.hidden || c.id === RE.cat).map(o).join('')}</optgroup>`;
   cs.value = RE.cat;
   const c = cat(RE.cat), subs = c ? c.subs.filter(x => !x.hidden || x.id === RE.sub) : [];
   ss.innerHTML = `<option value="">Bez podkategorije</option>` + subs.map(x => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('');
@@ -1559,7 +1679,7 @@ function saveRec(){
   const start = /^\d{4}-\d{2}$/.test($('#rStart').value) ? $('#rStart').value : curYM();
   const list = S.settings.rec || (S.settings.rec = []);
   const R = RE.id ? list.find(r => r.id === RE.id) : null;
-  const data = { cat:$('#rCat').value, sub:$('#rSub').value || null, a:Math.round(a * 100) / 100, c:RE.c, n:$('#rNote').value.trim(), day:+$('#rDay').value, active: $('#rActive') ? $('#rActive').checked : true };
+  const data = { k: incCat($('#rCat').value) ? 'inc' : undefined, cat:$('#rCat').value, sub:$('#rSub').value || null, a:Math.round(a * 100) / 100, c:RE.c, n:$('#rNote').value.trim(), day:+$('#rDay').value, active: $('#rActive') ? $('#rActive').checked : true };
   if (R){
     if (start !== R.start) R.lastGen = null;
     Object.assign(R, data, { start });
