@@ -292,11 +292,12 @@ nav.tabs svg{width:24px;height:24px}
     <h2>Ponavljajući troškovi</h2>
     <div class="card" id="recList"></div>
 
-    <h2>Bekap i Dropbox</h2>
+    <h2>Bekap (Dropbox i Google Drive)</h2>
     <div class="card">
       <div class="small" id="storeInfo"></div>
       <div class="small muted" id="lastBk" style="margin-top:6px"></div>
       <div id="dbxBox" style="margin-top:6px"></div>
+      <div id="gdBox" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)"></div>
       <button class="btn" id="bkFile">📤 Podeli / sačuvaj bekap fajl</button>
       <div class="note">Otvara meni za deljenje telefona; ako ga pregledač ne podržava, fajl ide u Preuzimanja (Downloads).</div>
       <button class="btn" id="bkCsv">📄 Izvezi CSV (za Excel)</button>
@@ -477,6 +478,7 @@ async function boot(){
   route();
   genRecurring();
   setTimeout(dbxAutoCheck, 1500);
+  gdResume();
 }
 
 /* ---------- Navigacija ---------- */
@@ -524,7 +526,7 @@ function renderHome(){
   const old = has && (!lb || (Date.now() - new Date(lb)) > 7 * 864e5);
   $('#remind').innerHTML = old ? `<div class="card" style="display:flex;align-items:center;gap:10px;padding:10px 12px">
       <span style="font-size:22px">☁️</span><div style="flex:1" class="small">${lb ? 'Poslednji bekap pre ' + Math.floor((Date.now() - new Date(lb)) / 864e5) + ' dana.' : 'Još nema bekapa.'} Podaci su samo na ovom telefonu.</div>
-      <button class="chip on" id="bkRemind">${dbxConnected() ? 'Bekap' : 'Podesi'}</button></div>` : '';
+      <button class="chip on" id="bkRemind">${dbxConnected() ? 'Dropbox' : GD.clientId ? 'Drive' : 'Podesi'}</button></div>` : '';
   $('#tiles').innerHTML = visCats().map(c =>
     `<button class="tile" data-cat="${esc(c.id)}" style="--tint:${esc(c.tint)}"><span class="ic">${esc(c.icon)}</span><span class="nm">${esc(c.name)}</span></button>`
   ).join('') + `<button class="tile add" id="tileAdd"><span class="ic">＋</span><span class="nm">Nova kategorija</span></button>`;
@@ -687,8 +689,13 @@ document.addEventListener('click', async e => {
   if (t.dataset.catHide){ return hideCat(t.dataset.catHide); }
   if (t.dataset.catShow){ const c = cat(t.dataset.catShow); c.hidden = false; persistSettings(); return renderSettings(); }
   if (t.id === 'newCatSave') return addCat();
-  if (t.id === 'bkRemind') return dbxConnected() ? dbxBackup(false).then(() => { location.hash = '#podesavanja'; }) : (location.hash = '#podesavanja');
+  if (t.id === 'bkRemind'){ location.hash = '#podesavanja'; return dbxConnected() ? dbxBackup(false) : GD.clientId ? gdRun('backup') : undefined; }
   if (t.id === 'dbxStartBtn') return dbxStart();
+  if (t.id === 'gdSaveBtn'){ const v = ($('#gdClient').value || '').trim(); if (!/\.apps\.googleusercontent\.com$/.test(v)){ bkStatus('Client ID treba da se završava na „.apps.googleusercontent.com“.'); return; } GD = { clientId:v }; gdSave(); renderDrive(); bkStatus('Google Drive je podešen — dodirni „Bekap na Google Drive sada“.'); return; }
+  if (t.id === 'gdNow') return gdRun('backup');
+  if (t.id === 'gdRestoreBtn') return gdRun('list');
+  if (t.dataset.gdId) return gdRun('download', t.dataset.gdId);
+  if (t.id === 'gdOff'){ if (await confirmBox('Ukloniti Google Drive iz aplikacije? Bekapi koji su već na Drive-u ostaju.', 'Ukloni')){ GD = {}; gdSave(); gdList = null; renderDrive(); } return; }
   if (t.id === 'dbxFinishBtn') return dbxFinish();
   if (t.id === 'dbxCancel'){ DBXS = { appKey:DBXS.appKey }; dbxSave(); return renderDropbox(); }
   if (t.id === 'dbxNow') return dbxBackup(false);
@@ -1026,6 +1033,7 @@ function renderSettings(){
   $('#catList').innerHTML = h;
   renderRecList();
   renderDropbox();
+  renderDrive();
   renderStoreInfo();
   $('#lastBk').textContent = st.lastBackup ? 'Poslednji bekap: ' + new Date(st.lastBackup).toLocaleString('sr-Latn-RS') : 'Bekap još nije napravljen.';
 }
@@ -1249,6 +1257,108 @@ function renderDropbox(){
     el.innerHTML = `<div class="small"><b>Direktan bekap na Dropbox</b> — jednim dodirom ili automatski svaki dan.</div>
       <div class="note">Jednom podesi: na <a href="https://www.dropbox.com/developers/apps" target="_blank" rel="noopener">dropbox.com/developers/apps</a> → Create app → <i>Scoped access</i> → <i>App folder</i> → ime (npr. Troskovi-Mile). Zatim <i>Permissions</i>: uključi <b>files.content.write</b> i <b>files.content.read</b> → Submit. Na <i>Settings</i> kopiraj <b>App key</b>.</div>
       <div class="addsub"><input class="inp" id="dbxKey" placeholder="App key" autocomplete="off" autocapitalize="off" value="${esc(DBXS.appKey || '')}"><button class="btn primary" id="dbxStartBtn">Dalje</button></div>`;
+  }
+}
+
+/* ---------- Google Drive: bekap preko Google OAuth (bez servera) ---------- */
+// Pristup samo fajlovima koje ova aplikacija napravi (drive.file). Token važi ~1 sat i čuva se samo na telefonu.
+const GD_LS = 'troskovi.gdrive', GD_FOLDER = 'Troskovi bekap', GD_KEEP = 30;
+let GD = (() => { try { return JSON.parse(localStorage.getItem(GD_LS)) || {}; } catch(e){ return {}; } })();
+let gdBusy = false, gdList = null;
+const gdSave = () => { try { localStorage.setItem(GD_LS, JSON.stringify(GD)); } catch(e){} };
+const gdRedirect = () => location.origin + location.pathname.replace(/index\.html$/, '');
+const gdHasToken = () => GD.token && GD.exp > Date.now() + 60000;
+function gdCatchRedirect(){
+  // Vraćanje sa Google prijave: #access_token=…&state=… (ili #error=…)
+  const h = location.hash.slice(1);
+  if (!/(^|&)(access_token|error)=/.test(h)) return;
+  const q = new URLSearchParams(h);
+  try { history.replaceState(null, '', '#podesavanja'); } catch(e){ location.hash = '#podesavanja'; }
+  if (q.get('state') !== GD.state){ GD.msg = 'Prijava na Google nije prihvaćena (neispravan odgovor). Pokušaj ponovo.'; GD.pending = null; gdSave(); return; }
+  if (q.get('error')){ GD.msg = q.get('error') === 'access_denied' ? 'Pristup Google Drive-u nije odobren.' : 'Google prijava nije uspela: ' + q.get('error'); GD.pending = null; gdSave(); return; }
+  GD.token = q.get('access_token'); GD.exp = Date.now() + (+q.get('expires_in') || 3600) * 1000; GD.state = null; gdSave();
+}
+function gdAuth(pending){
+  if (!GD.clientId){ bkStatus('Prvo unesi Google Client ID.'); return; }
+  GD.state = b64url(crypto.getRandomValues(new Uint8Array(16))); GD.pending = pending || null; gdSave();
+  location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({
+    client_id: GD.clientId, redirect_uri: gdRedirect(), response_type: 'token',
+    scope: 'https://www.googleapis.com/auth/drive.file', include_granted_scopes: 'true', state: GD.state, prompt: GD.once ? '' : 'consent' });
+}
+async function gdFetch(url, opts){
+  const r = await fetch(url, Object.assign({}, opts, { headers: Object.assign({ Authorization: 'Bearer ' + GD.token }, (opts && opts.headers) || {}) }));
+  if (r.status === 401){ GD.token = null; gdSave(); throw { auth:true }; }
+  if (!r.ok){
+    const t = await r.text().catch(() => '');
+    if (/accessNotConfigured|SERVICE_DISABLED|has not been used/.test(t)) throw new Error('Google Drive API nije uključen u tvom Google Cloud projektu (APIs & Services → Library → Google Drive API → Enable).');
+    throw new Error('Google Drive: ' + (t.slice(0, 160) || 'HTTP ' + r.status));
+  }
+  return r;
+}
+async function gdFolderId(create){
+  if (GD.folderId) return GD.folderId;
+  const q = `name='${GD_FOLDER}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+  const j = await (await gdFetch('https://www.googleapis.com/drive/v3/files?' + new URLSearchParams({ q, fields:'files(id,name)', spaces:'drive' }))).json();
+  if (j.files && j.files.length){ GD.folderId = j.files[0].id; gdSave(); return GD.folderId; }
+  if (!create) return null;
+  const f = await (await gdFetch('https://www.googleapis.com/drive/v3/files?fields=id', { method:'POST', headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify({ name: GD_FOLDER, mimeType: 'application/vnd.google-apps.folder' }) })).json();
+  GD.folderId = f.id; gdSave(); return f.id;
+}
+async function gdListBackups(){
+  const fid = await gdFolderId(false); if (!fid) return [];
+  const j = await (await gdFetch('https://www.googleapis.com/drive/v3/files?' + new URLSearchParams({ q:`'${fid}' in parents and trashed=false`, orderBy:'name desc', fields:'files(id,name)', pageSize:'100' }))).json();
+  return (j.files || []).filter(f => /^troskovi-bekap-/.test(f.name));
+}
+async function gdRun(action, arg){
+  if (!GD.clientId) return;
+  if (!gdHasToken()){ gdAuth(action === 'restore' ? 'list' : action); return; }
+  if (gdBusy) return; gdBusy = true;
+  try {
+    if (action === 'backup'){
+      bkStatus('Šaljem bekap na Google Drive…');
+      const fid = await gdFolderId(true), name = 'troskovi-bekap-' + stamp() + '.json', bnd = 'trsk' + uid();
+      const body = new Blob([`--${bnd}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n`, JSON.stringify({ name, parents:[fid], mimeType:'application/json' }),
+        `\r\n--${bnd}\r\nContent-Type: application/json\r\n\r\n`, backupJSON(), `\r\n--${bnd}--`]);
+      await gdFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', { method:'POST', headers:{ 'Content-Type':'multipart/related; boundary=' + bnd }, body });
+      GD.once = true; gdSave(); markBackup(); renderHome();
+      bkStatus('✅ Bekap je na Google Drive-u: ' + GD_FOLDER + ' › ' + name);
+      try { const all = await gdListBackups(); for (const f of all.slice(GD_KEEP)) await gdFetch('https://www.googleapis.com/drive/v3/files/' + f.id, { method:'DELETE' }); } catch(e){}
+    } else if (action === 'list'){
+      bkStatus('Učitavam bekape sa Google Drive-a…');
+      gdList = (await gdListBackups()).slice(0, 8); GD.once = true; gdSave();
+      bkStatus(gdList.length ? '' : 'Na Google Drive-u još nema bekapa.'); renderDrive();
+    } else if (action === 'download'){
+      bkStatus('Preuzimam bekap…');
+      const txt = await (await gdFetch('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(arg) + '?alt=media')).text();
+      bkStatus(''); gdList = null; renderDrive(); await restoreText(txt);
+    }
+  } catch(e){
+    if (e && e.auth){ gdBusy = false; gdAuth(action === 'download' ? 'list' : action); return; }
+    bkStatus('⚠️ ' + (e && e.message || e));
+  } finally { gdBusy = false; }
+}
+function gdResume(){
+  if (GD.msg){ bkStatus(GD.msg); GD.msg = null; gdSave(); }
+  const p = GD.pending; if (!p || !gdHasToken()) return;
+  GD.pending = null; gdSave();
+  if (location.hash !== '#podesavanja') location.hash = '#podesavanja';
+  gdRun(p);
+}
+function renderDrive(){
+  const el = $('#gdBox'); if (!el) return;
+  if (GD.clientId){
+    el.innerHTML = `<div class="small">🟢 <b>Google Drive je podešen.</b> Bekapi idu u folder <i>${GD_FOLDER}</i> na tvom Drive-u; čuva se poslednjih ${GD_KEEP}.</div>
+      <button class="btn primary" id="gdNow">☁️ Bekap na Google Drive sada</button>
+      <button class="btn" id="gdRestoreBtn">↩️ Vrati sa Google Drive-a…</button>
+      ${gdList ? `<div class="chips" style="margin-top:8px">${gdList.map(f => `<button class="chip" data-gd-id="${esc(f.id)}">${esc(bkLabel(f.name))}</button>`).join('')}</div>` : ''}
+      <div class="note">Google traži potvrdu prijave otprilike jednom na sat, pa bekap na Drive ide na dodir (nije automatski kao Dropbox).</div>
+      <button class="btn danger" id="gdOff" style="background:transparent">Ukloni Google Drive</button>`;
+  } else {
+    el.innerHTML = `<div class="small"><b>Bekap na Google Drive</b></div>
+      <div class="note">Jednom podesi na <a href="https://console.cloud.google.com/" target="_blank" rel="noopener">console.cloud.google.com</a>: napravi projekat → uključi <b>Google Drive API</b> → OAuth consent screen (External, dodaj sebe kao test korisnika) → Clients → <b>Web application</b> sa<br>
+      JavaScript origin: <b>${esc(location.origin)}</b><br>Redirect URI: <b>${esc(gdRedirect())}</b><br>i kopiraj <b>Client ID</b>.</div>
+      <div class="addsub"><input class="inp" id="gdClient" placeholder="Client ID (….apps.googleusercontent.com)" autocomplete="off" autocapitalize="off"><button class="btn primary" id="gdSaveBtn">Sačuvaj</button></div>`;
   }
 }
 
@@ -1477,6 +1587,7 @@ function toast(t){ const el = $('#toast'); el.textContent = t; el.classList.add(
 
 /* ---------- Start ---------- */
 setMode('starting');
+gdCatchRedirect();
 route();
 boot();
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => {});

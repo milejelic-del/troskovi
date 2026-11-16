@@ -1,6 +1,6 @@
 // Troškovi — service worker: aplikacija radi i bez interneta.
 // Podaci se NE keširaju ovde; oni su u IndexedDB na uređaju.
-const CACHE = 'troskovi-v3';
+const CACHE = 'troskovi-v4';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
