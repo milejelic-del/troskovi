@@ -332,6 +332,13 @@ nav.tabs svg{width:24px;height:24px}
       <div class="small muted" id="bkStatus" style="margin-top:8px"></div>
     </div>
 
+    <h2>Verzija</h2>
+    <div class="card small">
+      <div>Verzija aplikacije: <b id="appVer"></b></div>
+      <button class="btn" id="updBtn">🔄 Proveri i učitaj novu verziju</button>
+      <div class="note">Tvoji podaci ostaju — osvežava se samo kod aplikacije.</div>
+    </div>
+
     <h2>Brzi pristup</h2>
     <div class="card small">
       Dodaj aplikaciju na početni ekran — tada radi kao prava aplikacija, i bez interneta.<br>
@@ -748,6 +755,7 @@ document.addEventListener('click', async e => {
   const t = e.target.closest('button,a'); if (!t) return;
   if (t.dataset.close !== undefined) return closeSheet();
   if (t.dataset.cat && t.classList.contains('tile')) return openCategory(t.dataset.cat);
+  if (t.id === 'updBtn') return forceUpdate();
   if (t.id === 'eyeBtn'){ ui.reveal = !ui.reveal; paintEye(); return render(); }
   if (t.id === 'tileInc') return openIncomePicker();
   if (t.dataset.incPick) return openCategory(t.dataset.incPick);
@@ -1728,12 +1736,27 @@ let toastT;
 function toast(t){ const el = $('#toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), 2200); }
 
 /* ---------- Start ---------- */
+const APP_VERSION = '2026-11-17.2';
 setMode('starting');
 paintEye();
+$('#appVer').textContent = APP_VERSION;
 gdCatchRedirect();
 route();
 boot();
-if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')){
+  const hadCtrl = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register('sw.js', { updateViaCache:'none' }).then(r => r.update()).catch(() => {});
+  // Kad stigne nova verzija, učitaj je odmah (samo kod; podaci su u IndexedDB i ostaju).
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadCtrl && !reloaded){ reloaded = true; flush(); location.reload(); } });
+}
+async function forceUpdate(){
+  toast('Proveravam novu verziju…');
+  flush();
+  try { const r = await navigator.serviceWorker.getRegistration(); if (r) await r.update(); } catch(e){}
+  try { const ks = await caches.keys(); await Promise.all(ks.map(k => caches.delete(k))); } catch(e){}
+  setTimeout(() => location.reload(), 300);
+}
 </script>
 </body>
 </html>
