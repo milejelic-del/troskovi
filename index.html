@@ -43,6 +43,7 @@ header.top{position:sticky;top:0;z-index:5;background:var(--bg);
 header.top .wrap{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
 header h1{font-size:22px;margin:0;font-weight:700;letter-spacing:-.01em}
 .sync{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.eye{font-size:18px;line-height:1;padding:4px 6px;margin-right:4px;border-radius:10px;background:var(--chip)}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--muted)}
 .dot.ok{background:#1baf7a}.dot.warn{background:#eda100}
 .card{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);border:1px solid var(--line);padding:14px;margin:0 0 12px}
@@ -224,7 +225,7 @@ nav.tabs svg{width:24px;height:24px}
 <body>
 <header class="top"><div class="wrap">
   <h1 id="title">Troškovi</h1>
-  <div class="sync"><span class="dot" id="syncDot"></span><span id="syncTxt">Povezivanje…</span></div>
+  <div class="sync"><button id="eyeBtn" class="eye" hidden aria-label="Prikaži iznose prihoda">🙈</button><span class="dot" id="syncDot"></span><span id="syncTxt">Povezivanje…</span></div>
 </div></header>
 
 <main class="wrap">
@@ -287,6 +288,12 @@ nav.tabs svg{width:24px;height:24px}
 
   <!-- PODESAVANJA -->
   <section class="view" id="v-podesavanja">
+    <h2>Privatnost</h2>
+    <div class="card">
+      <label class="setrow"><span>Sakrij iznose prihoda (prikaži *****)</span><input type="checkbox" id="privChk" style="width:22px;height:22px;flex:none"></label>
+      <div class="note">Kad je uključeno, plata i ostali prihodi (i bilans) prikazuju se kao zvezdice. Dodirni 🙈 gore desno da ih privremeno vidiš — ponovo se sakriju čim izađeš iz aplikacije.</div>
+    </div>
+
     <h2>Valuta</h2>
     <div class="card">
       <div class="setrow"><span>Prikaz zbirova u</span>
@@ -399,6 +406,7 @@ function dayLabel(d){
 const nfRSD = new Intl.NumberFormat('sr-Latn-RS', {minimumFractionDigits:0, maximumFractionDigits:2});
 const nfRSD0 = new Intl.NumberFormat('sr-Latn-RS', {maximumFractionDigits:0});
 const nfEUR = new Intl.NumberFormat('sr-Latn-RS', {minimumFractionDigits:2, maximumFractionDigits:2});
+const fmtReal = (v, c, r) => fmt(v, c, r);
 function fmt(v, cur, round){ return cur === 'EUR' ? nfEUR.format(v) + ' €' : (round ? nfRSD0 : nfRSD).format(v) + ' RSD'; }
 function compact(v){ if (v >= 1e6) return nfRSD.format(Math.round(v / 1e5) / 10) + 'M'; if (v >= 1e4) return nfRSD0.format(v / 1e3) + 'k'; if (v >= 1e3) return nfRSD.format(Math.round(v / 100) / 10) + 'k'; return nfRSD0.format(v); }
 const toRSD = it => it.c === 'RSD' ? it.a : it.a * it.r;
@@ -444,6 +452,13 @@ const ui = { view:'unos', ym:curYM(), fCat:'', openCat:null, editCat:null };
 const incCat = id => (S.settings.incCats || []).find(c => c.id === id);
 const cat = id => S.settings.cats.find(c => c.id === id) || incCat(id);
 const isInc = it => it.k === 'inc';
+const PRIV_LS = 'troskovi.privacy';
+let PRIV = (() => { try { return localStorage.getItem(PRIV_LS) !== '0'; } catch(e){ return true; } })();
+const STARS = '*****';
+const hideInc = () => PRIV && !ui.reveal;
+const fmtI = (v, cur, round) => hideInc() ? STARS + ' ' + (cur === 'EUR' ? '€' : 'RSD') : fmt(v, cur, round);
+function paintEye(){ const b = $('#eyeBtn'); if (!b) return; b.hidden = !PRIV; b.textContent = ui.reveal ? '👁️' : '🙈'; b.setAttribute('aria-label', ui.reveal ? 'Sakrij iznose prihoda' : 'Prikaži iznose prihoda'); }
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && ui.reveal){ ui.reveal = false; paintEye(); render(); } });
 const isExp = it => it.k !== 'inc';
 const catsOfKind = k => k === 'inc' ? S.settings.incCats : S.settings.cats;
 const subOf = (c, id) => c && id ? c.subs.find(s => s.id === id) : null;
@@ -539,13 +554,14 @@ function render(){
 function sumItems(items, cur){ return items.reduce((s, it) => s + val(it, cur), 0); }
 function itemRow(it, showDate){
   const n = catName(it); const disp = S.settings.display;
-  const other = it.c === 'EUR' ? fmt(toRSD(it), 'RSD', true) : '';
+  const masked = isInc(it) && hideInc();
+  const other = it.c === 'EUR' && !masked ? fmt(toRSD(it), 'RSD', true) : '';
   const t2 = [n.sub, it.n].filter(Boolean).join(' · ') || (showDate ? dayLabel(it.d) : '');
   const t2b = (it.rec ? '🔁 ' : '') + (showDate && (n.sub || it.n) ? dayLabel(it.d) + ' · ' + t2 : t2);
   return `<button class="row" data-edit="${esc(it.id)}" data-ym="${esc(ymOf(it.d))}" style="--tint:${esc(n.c ? n.c.tint : '#898781')}">
     <span class="ic">${esc(n.icon)}</span>
     <span class="mid"><div class="t1">${esc(n.name)}</div><div class="t2">${esc(t2b || it.t || '')}</div></span>
-    <span class="amt${isInc(it) ? ' inc' : ''}">${isInc(it) ? '+' : ''}${esc(fmt(it.a, it.c))}${other ? `<small>≈ ${esc(other)}</small>` : ''}</span></button>`;
+    <span class="amt${isInc(it) ? ' inc' : ''}">${isInc(it) ? '+' : ''}${esc(masked ? fmtI(it.a, it.c) : fmt(it.a, it.c))}${other ? `<small>≈ ${esc(other)}</small>` : ''}</span></button>`;
 }
 function renderHome(){
   const disp = S.settings.display;
@@ -592,11 +608,12 @@ function renderBudget(){
   const d = B.disp, f = v => fmt(v, d, true), over = B.left < 0;
   const tot = Math.max(B.base, B.spent + B.planExp, 1);
   const wS = Math.min(100, B.spent / tot * 100), wP = Math.min(100 - wS, B.planExp / tot * 100);
-  const src = B.b.mode === 'income' ? `prihodi ${f(B.income)}${B.planInc ? ' + očekivano ' + f(B.planInc) : ''}` : 'fiksni budžet';
+  const fI = v => fmtI(v, d, true);
+  const src = B.b.mode === 'income' ? `prihodi ${fI(B.income)}${B.planInc ? ' + očekivano ' + fI(B.planInc) : ''}` : 'fiksni budžet';
   el.innerHTML = `<div class="card bud">
-    <div class="top"><span class="small muted">Budžet · ${MONTHS[new Date().getMonth()]}</span><span class="small muted">${esc(f(B.base))}</span></div>
+    <div class="top"><span class="small muted">Budžet · ${MONTHS[new Date().getMonth()]}</span><span class="small muted">${esc(B.b.mode === 'income' ? fI(B.base) : f(B.base))}</span></div>
     <div class="big ${over ? 'over' : ''}">${over ? '⚠️ Prekoračeno ' + esc(f(-B.left)) : 'Preostalo ' + esc(f(B.left))}</div>
-    <div class="bar" role="img" aria-label="Potrošeno ${esc(f(B.spent))} od ${esc(f(B.base))}">
+    <div class="bar" role="img" aria-label="Potrošeno ${esc(f(B.spent))}">
       <i style="width:${wS.toFixed(1)}%;background:${over ? 'var(--danger)' : 'var(--series)'}"></i>${wP > 0 ? `<i style="width:${wP.toFixed(1)}%;background:var(--series);opacity:.35"></i>` : ''}</div>
     <div class="small muted">Potrošeno ${esc(f(B.spent))}${B.planExp ? ' · planirano još ' + esc(f(B.planExp)) : ''} · ${esc(src)}</div>
     <div class="small" style="margin-top:4px">${over ? 'Do kraja meseca: ' + B.daysLeft + ' ' + (B.daysLeft === 1 ? 'dan' : 'dana') : `Još ${B.daysLeft} ${B.daysLeft === 1 ? 'dan' : 'dana'} · možeš da trošiš <b>≈ ${esc(f(B.perDay))}</b> dnevno`}</div>
@@ -715,7 +732,7 @@ function saveEntry(){
   if (!E.editId && S.settings.lastCur !== E.cur){ S.settings.lastCur = E.cur; persistSettings(); }
   const wasEdit = !!E.editId;
   closeSheet(); render();
-  toast(wasEdit ? 'Izmenjeno' : item.k === 'inc' && !item.rec ? `Prihod sačuvan: +${fmt(v, item.c)}` : item.rec ? `Sačuvano i ponavlja se ${item.d.slice(8).replace(/^0/, '')}. u mesecu` : `Sačuvano: ${fmt(v, item.c)}`);
+  toast(wasEdit ? 'Izmenjeno' : item.k === 'inc' && !item.rec ? `Prihod sačuvan: +${fmtI(v, item.c)}` : item.rec ? `Sačuvano i ponavlja se ${item.d.slice(8).replace(/^0/, '')}. u mesecu` : `Sačuvano: ${fmt(v, item.c)}`);
   if (item.rec) genRecurring();
 }
 async function deleteEntry(){
@@ -731,6 +748,7 @@ document.addEventListener('click', async e => {
   const t = e.target.closest('button,a'); if (!t) return;
   if (t.dataset.close !== undefined) return closeSheet();
   if (t.dataset.cat && t.classList.contains('tile')) return openCategory(t.dataset.cat);
+  if (t.id === 'eyeBtn'){ ui.reveal = !ui.reveal; paintEye(); return render(); }
   if (t.id === 'tileInc') return openIncomePicker();
   if (t.dataset.incPick) return openCategory(t.dataset.incPick);
   if (t.id === 'incAddCat'){ closeSheet(); location.hash = '#podesavanja'; setTimeout(() => { const i = $('#newIncName'); if (i){ i.scrollIntoView({block:'center'}); i.focus(); } }, 60); return; }
@@ -805,6 +823,7 @@ document.addEventListener('change', e => {
   else if (t.dataset.subName){ const c = cat(t.dataset.catId); const s = subOf(c, t.dataset.subName); const v = t.value.trim(); if (s && v && v !== s.name){ s.name = v; persistSettings(); } }
   else if (t.id === 'restoreFile'){ const f = t.files && t.files[0]; t.value = ''; if (f) restoreFrom(f); }
   else if (t.id === 'budAmt'){ const v = parseNum(t.value); S.settings.budget.a = v > 0 ? Math.round(v * 100) / 100 : 0; persistSettings(); renderSettings(); }
+  else if (t.id === 'privChk'){ PRIV = t.checked; ui.reveal = false; try { localStorage.setItem(PRIV_LS, PRIV ? '1' : '0'); } catch(e){} paintEye(); }
   else if (t.id === 'budPlan'){ S.settings.budget.plan = t.checked; persistSettings(); }
   else if (t.id === 'dbxAuto'){ DBXS.auto = t.checked; dbxSave(); }
   else if (t.id === 'csvFile'){ const f = t.files && t.files[0]; t.value = ''; if (f) csvImport(f); }
@@ -835,11 +854,11 @@ function renderList(){
     + `<optgroup label="Prihodi">${S.settings.incCats.filter(c => !c.hidden || used.has(c.id)).map(opt).join('')}</optgroup>`;
   fc.value = ui.fCat; if (fc.value !== ui.fCat){ ui.fCat = ''; fc.value = ''; }
   const items = itemsOf(ui.ym).filter(i => !ui.fCat || (ui.fCat === '__exp' ? isExp(i) : ui.fCat === '__inc' ? isInc(i) : i.cat === ui.fCat)).slice().sort(cmpItems);
-  const dayTot = arr => { const e = sumItems(arr.filter(isExp), disp), n = sumItems(arr.filter(isInc), disp); return [e ? '−' + fmt(e, disp, true) : '', n ? '+' + fmt(n, disp, true) : ''].filter(Boolean).join(' · '); };
+  const dayTot = arr => { const e = sumItems(arr.filter(isExp), disp), n = sumItems(arr.filter(isInc), disp); return [e ? '−' + fmt(e, disp, true) : '', n ? '+' + fmtI(n, disp, true) : ''].filter(Boolean).join(' · '); };
   const disp = S.settings.display;
   if (!items.length){ $('#list').innerHTML = `<div class="card empty">Nema troškova za ${esc(ymLabel(ui.ym))}.</div>`; return; }
   const tE = sumItems(items.filter(isExp), disp), tI = sumItems(items.filter(isInc), disp);
-  let html = `<div class="dayhead" style="margin-top:4px"><span>${items.length} unosa</span><span>${tE ? 'Troškovi ' + esc(fmt(tE, disp, true)) : ''}${tE && tI ? ' · ' : ''}${tI ? '<span style="color:var(--good)">Prihodi ' + esc(fmt(tI, disp, true)) + '</span>' : ''}</span></div>`;
+  let html = `<div class="dayhead" style="margin-top:4px"><span>${items.length} unosa</span><span>${tE ? 'Troškovi ' + esc(fmt(tE, disp, true)) : ''}${tE && tI ? ' · ' : ''}${tI ? '<span style="color:var(--good)">Prihodi ' + esc(fmtI(tI, disp, true)) + '</span>' : ''}</span></div>`;
   const byDay = {};
   items.forEach(i => (byDay[i.d] = byDay[i.d] || []).push(i));
   Object.keys(byDay).sort().reverse().forEach(d => {
@@ -944,7 +963,8 @@ function renderCharts(){
   const prev = sumItems(itemsIn(pr).filter(KF), disp);
   const oTot = sumItems(allR.filter(ui.kind === 'inc' ? isExp : isInc), disp);
   const net = ui.kind === 'inc' ? total - oTot : oTot - total;
-  const balance = oTot || ui.kind === 'inc' ? `${ui.kind === 'inc' ? 'Troškovi' : 'Prihodi'} ${fmt(oTot, disp, true)} · Bilans ${net >= 0 ? '+' : '−'}${fmt(Math.abs(net), disp, true)}` : '';
+  const M = ui.kind === 'inc' && hideInc(), F = v => M ? STARS + ' ' + (disp === 'EUR' ? '€' : 'RSD') : fmt(v, disp, true);
+  const balance = oTot || ui.kind === 'inc' ? `${ui.kind === 'inc' ? 'Troškovi ' + fmt(oTot, disp, true) : 'Prihodi ' + fmtI(oTot, disp, true)} · Bilans ${hideInc() ? STARS : (net >= 0 ? '+' : '−') + fmt(Math.abs(net), disp, true)}` : '';
   const span = diffDays(r.from, r.to) + 1;
   const lastDay = r.to < today() ? r.to : today();
   const elapsed = Math.max(1, diffDays(r.from, lastDay) + 1);
@@ -954,11 +974,11 @@ function renderCharts(){
   const perMonth = span > 62;
   const avg = perMonth ? total / Math.max(1, elapsed / 30.44) : total / elapsed;
   $('#hero').innerHTML = `<div class="small muted">${esc(rangeLabel(p, r))} · ${span} ${span === 1 ? 'dan' : 'dana'}</div>
-    <div class="big">${esc(fmt(total, disp, true))}</div>
-    <div class="sub">${esc(delta || other)}</div>
+    <div class="big">${esc(F(total))}</div>
+    <div class="sub">${esc(delta || (M ? '' : other))}</div>
     ${balance ? `<div class="sub" style="margin-top:2px">${esc(balance)}</div>` : ''}
     <div class="kpis"><div><div class="k">Unosa</div><div class="v">${nfRSD0.format(items.length)}</div></div>
-      <div><div class="k">${perMonth ? 'Prosek/mes' : 'Prosek/dan'}</div><div class="v">${esc(compact(avg))}</div></div>
+      <div><div class="k">${perMonth ? 'Prosek/mes' : 'Prosek/dan'}</div><div class="v">${esc(M ? STARS : compact(avg))}</div></div>
       <div><div class="k">Najviše</div><div class="v">${esc(topCatName(items, disp))}</div></div></div>`;
 
   // Po kategorijama
@@ -967,19 +987,19 @@ function renderCharts(){
   const rows = Object.entries(byCat).sort((a, b) => b[1].v - a[1].v);
   $$('#catView button').forEach(x => x.classList.toggle('on', x.dataset.cview === ui.catView));
   if (!rows.length){ $('#byCat').innerHTML = `<div class="empty">Nema ${ui.kind === 'inc' ? 'prihoda' : 'troškova'} u izabranom periodu.</div>`; }
-  else if (ui.catView === 'pie') renderPie(byCat, rows, total, disp);
+  else if (ui.catView === 'pie') renderPie(byCat, rows, total, disp, M);
   else {
     const max = rows[0][1].v;
     $('#byCat').innerHTML = rows.map(([cid, o]) => {
       const c = cat(cid); const nm = c ? c.icon + ' ' + c.name : '❔ Nepoznato';
       let h = `<button class="cbar" data-cbar="${esc(cid)}" aria-expanded="${ui.openCat === cid}">
-        <div class="top"><span class="n">${esc(nm)}</span><span class="a">${esc(fmt(o.v, disp, true))}<small>${pct(o.v / total * 100)}%</small></span></div>
+        <div class="top"><span class="n">${esc(nm)}</span><span class="a">${esc(F(o.v))}<small>${pct(o.v / total * 100)}%</small></span></div>
         <div class="track"><div class="fill" style="width:${(o.v / max * 100).toFixed(2)}%"></div></div></button>`;
       if (ui.openCat === cid){
         const ss = Object.entries(o.subs).sort((a, b) => b[1] - a[1]); const smax = ss[0][1];
         h += `<div class="subbars">` + ss.map(([sid, v]) => {
           const sb = subOf(c, sid === '_' ? null : sid);
-          return `<div class="cbar"><div class="top"><span class="n">${esc(sb ? sb.name : 'Bez podkategorije')}</span><span class="a">${esc(fmt(v, disp, true))}<small>${pct(v / o.v * 100)}%</small></span></div>
+          return `<div class="cbar"><div class="top"><span class="n">${esc(sb ? sb.name : 'Bez podkategorije')}</span><span class="a">${esc(F(v))}<small>${pct(v / o.v * 100)}%</small></span></div>
             <div class="track"><div class="fill" style="width:${(v / smax * 100).toFixed(2)}%"></div></div></div>`;
         }).join('') + `</div>`;
       }
@@ -990,14 +1010,14 @@ function renderCharts(){
   // Kroz vreme
   const tb = timeBuckets(p, r, items, disp);
   $('#chTimeTitle').textContent = tb.title;
-  barChart($('#chDays'), tb.data, disp);
+  barChart($('#chDays'), tb.data, disp, M);
 
   // 12 meseci (samo u prikazu meseca)
   $('#trendSec').hidden = p.mode !== 'month';
   if (p.mode === 'month'){
     const ym0 = r.from.slice(0, 7), ms = [];
     for (let k = 11; k >= 0; k--){ const ym = shiftYM(ym0, -k); ms.push({ v: sumItems(itemsOf(ym).filter(KF), disp), label: MONTHS_SHORT[+ym.slice(5) - 1], tip: ymLabel(ym) }); }
-    barChart($('#chMonths'), ms, disp);
+    barChart($('#chMonths'), ms, disp, M);
   }
 }
 function setPreset(k){
@@ -1015,7 +1035,8 @@ function arcPath(cx, cy, R, r, a0, a1){
   const large = a1 - a0 > Math.PI ? 1 : 0;
   return `M${P(R, a0)} A${R} ${R} 0 ${large} 1 ${P(R, a1)} L${P(r, a1)} A${r} ${r} 0 ${large} 0 ${P(r, a0)} Z`;
 }
-function renderPie(byCat, rows, total, disp){
+function renderPie(byCat, rows, total, disp, mask){
+  const fmt = (v, c, r) => mask ? STARS + ' ' + (c === 'EUR' ? '€' : 'RSD') : fmtReal(v, c, r);
   let entries, head = '', base = total, drillable = !ui.pieCat;
   if (ui.pieCat && !byCat[ui.pieCat]) ui.pieCat = null, drillable = true;
   if (ui.pieCat){
@@ -1064,13 +1085,13 @@ function topCatName(items, disp){
   const c = cat(top[0]); return c ? c.icon + ' ' + c.name : '—';
 }
 function niceMax(v){ if (v <= 0) return 1; const e = Math.pow(10, Math.floor(Math.log10(v))); const f = v / e; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * e; }
-function barChart(host, data, disp){
+function barChart(host, data, disp, mask){
   const W = Math.max(260, host.clientWidth || 320), H = 170, padL = 34, padB = 20, padT = 8;
   const max = niceMax(Math.max(0, ...data.map(d => d.v)));
   const iw = W - padL, ih = H - padB - padT, n = data.length, slot = iw / n, bw = Math.max(2, slot - 2);
   const y = v => padT + ih - (v / max) * ih;
   let s = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img">`;
-  [0.5, 1].forEach(f => { const yy = y(max * f); s += `<line x1="${padL}" x2="${W}" y1="${yy}" y2="${yy}" stroke="var(--grid)" stroke-width="1"/><text x="${padL - 6}" y="${yy + 3}" text-anchor="end">${compact(max * f)}</text>`; });
+  [0.5, 1].forEach(f => { const yy = y(max * f); s += `<line x1="${padL}" x2="${W}" y1="${yy}" y2="${yy}" stroke="var(--grid)" stroke-width="1"/><text x="${padL - 6}" y="${yy + 3}" text-anchor="end">${mask ? '***' : compact(max * f)}</text>`; });
   s += `<line x1="${padL}" x2="${W}" y1="${padT + ih}" y2="${padT + ih}" stroke="var(--base)" stroke-width="1"/><text x="${padL - 6}" y="${padT + ih + 3}" text-anchor="end">0</text>`;
   data.forEach((d, i) => {
     const x = padL + i * slot + 1, h = (d.v / max) * ih;
@@ -1086,7 +1107,7 @@ function barChart(host, data, disp){
   const tip = host.querySelector('.tip');
   const show = el => {
     const i = +el.dataset.i, d = data[i];
-    tip.innerHTML = `<b>${esc(fmt(d.v, disp, true))}</b>${esc(d.tip)}`;
+    tip.innerHTML = `<b>${esc(mask ? STARS : fmt(d.v, disp, true))}</b>${esc(d.tip)}`;
     const x = padL + i * slot + slot / 2; tip.style.left = Math.min(Math.max(x, 60), W - 60) + 'px'; tip.style.top = (y(d.v)) + 'px'; tip.style.display = 'block';
   };
   host.querySelectorAll('.hit').forEach(el => { el.addEventListener('pointerenter', () => show(el)); el.addEventListener('click', () => show(el)); });
@@ -1107,6 +1128,7 @@ function renderSettings(){
   $('#catList').innerHTML = catEditorHTML(st.cats, 'exp');
   $('#incList').innerHTML = catEditorHTML(st.incCats, 'inc');
   renderBudgetSettings();
+  $('#privChk').checked = PRIV;
 
   renderRecList();
   renderDropbox();
@@ -1627,14 +1649,14 @@ function renderRecList(){
   const disp = S.settings.display, list = S.settings.rec || [];
   const mE = list.filter(R => R.active && !incCat(R.cat)).reduce((t, R) => t + conv(R.a, R.c, disp), 0);
   const mI = list.filter(R => R.active && incCat(R.cat)).reduce((t, R) => t + conv(R.a, R.c, disp), 0);
-  el.innerHTML = (list.length ? `<div class="small muted" style="margin-bottom:4px">Mesečno: troškovi <b style="color:var(--ink)">${esc(fmt(mE, disp, true))}</b>${mI ? ` · prihodi <b style="color:var(--good)">${esc(fmt(mI, disp, true))}</b>` : ''}</div>` : '')
+  el.innerHTML = (list.length ? `<div class="small muted" style="margin-bottom:4px">Mesečno: troškovi <b style="color:var(--ink)">${esc(fmt(mE, disp, true))}</b>${mI ? ` · prihodi <b style="color:var(--good)">${esc(fmtI(mI, disp, true))}</b>` : ''}</div>` : '')
     + list.map(R => {
       const c = cat(R.cat), sb = subOf(c, R.sub);
       const nm = (c ? c.name : 'Nepoznato') + (sb ? ' › ' + sb.name : '');
       const when = R.active ? `${R.day}. u mesecu · sledeći ${shortDate(recNext(R), true)}` : 'pauzirano';
       return `<div class="catrow" style="${R.active ? '' : 'opacity:.55'}"><span style="font-size:22px">${esc(c ? c.icon : '🔁')}</span>
         <div class="nm">${esc(nm)}<small>${esc(when)}${R.n ? ' · ' + esc(R.n) : ''}</small></div>
-        <span style="font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;${incCat(R.cat) ? 'color:var(--good)' : ''}">${incCat(R.cat) ? '+' : ''}${esc(fmt(R.a, R.c))}</span>
+        <span style="font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;${incCat(R.cat) ? 'color:var(--good)' : ''}">${incCat(R.cat) ? '+' + esc(fmtI(R.a, R.c)) : esc(fmt(R.a, R.c))}</span>
         <button class="mini" data-rec-edit="${esc(R.id)}" aria-label="Uredi">✎</button></div>`;
     }).join('')
     + (list.length ? '' : `<div class="small muted">Nema ponavljajućih troškova. Uključi „🔁 Ponavlja se svakog meseca“ pri unosu troška ili dodaj ovde.</div>`)
@@ -1707,6 +1729,7 @@ function toast(t){ const el = $('#toast'); el.textContent = t; el.classList.add(
 
 /* ---------- Start ---------- */
 setMode('starting');
+paintEye();
 gdCatchRedirect();
 route();
 boot();
