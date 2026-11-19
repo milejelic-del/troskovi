@@ -1272,7 +1272,7 @@ function addCat(kind){
 function backupJSON(){ return JSON.stringify({ app:'troskovi', version:1, exportedAt:new Date().toISOString(), settings:S.settings, months:S.months }); }
 function stamp(){ const d = new Date(); return isoDate(d) + '_' + pad2(d.getHours()) + pad2(d.getMinutes()) + pad2(d.getSeconds()); }
 function markBackup(){ S.settings.lastBackup = new Date().toISOString(); persistSettings(); renderSettings(); }
-const bkStatus = t => { $('#bkStatus').textContent = t || ''; };
+const bkStatus = t => { const el = $('#bkStatus'); if (el) el.textContent = t || ''; if (t && /^(✅|⚠️)/.test(t)) toast(t, t.length > 60 ? 5000 : 3000); };
 // Chrome na Androidu deli samo određene tipove fajlova (npr. .txt, .csv, slike) — .json odbija,
 // pa se bekap deli kao .txt (sadržaj je i dalje JSON i „Vrati iz bekapa…“ ga prepoznaje).
 let lastShareErr = '';
@@ -1363,7 +1363,7 @@ async function dbxFinish(){
   if (!code){ $('#dbxCode').focus(); return; }
   bkStatus('Povezujem Dropbox…');
   try {
-    const r = await fetch('https://api.dropboxapi.com/oauth2/token', { method:'POST', body:new URLSearchParams({ code, grant_type:'authorization_code', code_verifier:DBXS.verifier, client_id:DBXS.appKey }) });
+    const r = await tfetch('https://api.dropboxapi.com/oauth2/token', { method:'POST', body:new URLSearchParams({ code, grant_type:'authorization_code', code_verifier:DBXS.verifier, client_id:DBXS.appKey }) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.refresh_token) throw new Error(j.error_description || j.error || ('HTTP ' + r.status));
     DBXS = { appKey:DBXS.appKey, refresh:j.refresh_token, access:j.access_token, exp:Date.now() + (j.expires_in || 14400) * 1000, auto: DBXS.auto !== false };
@@ -1371,9 +1371,15 @@ async function dbxFinish(){
     dbxBackup(false);
   } catch(e){ bkStatus('Povezivanje nije uspelo: ' + e.message + '. Proveri kod (važi samo jednom) i pokušaj ponovo od „Otvori Dropbox“.'); }
 }
+function tfetch(url, opts, ms){
+  const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), ms || 45000);
+  return fetch(url, Object.assign({}, opts, { signal: ctl.signal }))
+    .catch(e => { throw new Error(e && e.name === 'AbortError' ? 'Dropbox ne odgovara (isteklo vreme) — proveri internet i pokušaj ponovo.' : 'Nema veze sa Dropbox-om — proveri internet.'); })
+    .finally(() => clearTimeout(tm));
+}
 async function dbxToken(force){
   if (!force && DBXS.access && DBXS.exp > Date.now() + 60000) return DBXS.access;
-  const r = await fetch('https://api.dropboxapi.com/oauth2/token', { method:'POST', body:new URLSearchParams({ grant_type:'refresh_token', refresh_token:DBXS.refresh, client_id:DBXS.appKey }) });
+  const r = await tfetch('https://api.dropboxapi.com/oauth2/token', { method:'POST', body:new URLSearchParams({ grant_type:'refresh_token', refresh_token:DBXS.refresh, client_id:DBXS.appKey }) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok || !j.access_token){
     if (j.error === 'invalid_grant'){ DBXS = { appKey:DBXS.appKey, auto:DBXS.auto }; dbxSave(); renderDropbox(); throw new Error('Veza sa Dropbox-om je istekla ili je opozvana — poveži ponovo.'); }
@@ -1385,7 +1391,7 @@ async function dbxToken(force){
 async function dbxCall(url, opts){
   for (let i = 0; i < 2; i++){
     const tok = await dbxToken(i > 0);
-    const r = await fetch(url, Object.assign({}, opts, { headers: Object.assign({ Authorization:'Bearer ' + tok }, opts.headers || {}) }));
+    const r = await tfetch(url, Object.assign({}, opts, { headers: Object.assign({ Authorization:'Bearer ' + tok }, opts.headers || {}) }), url.includes('/upload') ? 120000 : 45000);
     if (r.status === 401 && i === 0) continue;
     if (!r.ok){
       const t = await r.text().catch(() => '');
@@ -1401,22 +1407,28 @@ async function dbxListBackups(){
   const j = await r.json();
   return (j.entries || []).filter(e => e['.tag'] === 'file' && /^troskovi-bekap-.*\.(json|txt|b64)$/.test(e.name)).sort((a, b) => b.name.localeCompare(a.name));
 }
+function dbxBtn(){ const b = $('#dbxNow'); if (b){ b.disabled = dbxBusy; b.textContent = dbxBusy ? '⏳ Šaljem bekap…' : '☁️ Bekap na Dropbox sada'; } }
 async function dbxBackup(silent){
-  if (!dbxConnected() || dbxBusy) return;
-  dbxBusy = true; if (!silent) bkStatus('Šaljem bekap na Dropbox…');
+  if (!dbxConnected()){
+    if (!silent){ toast('Dropbox još nije povezan — podesi ga ovde.', 3500); location.hash = '#podesavanja'; setTimeout(() => { const b = $('#dbxBox'); if (b) b.scrollIntoView({ block:'center' }); }, 80); }
+    return;
+  }
+  if (dbxBusy){ if (!silent) toast('Bekap na Dropbox je već u toku…'); return; }
+  dbxBusy = true; dbxBtn(); if (!silent){ bkStatus('Šaljem bekap na Dropbox…'); toast('⏳ Šaljem bekap na Dropbox…', 8000); }
   try {
     const name = 'troskovi-bekap-' + stamp() + '.json';
     await dbxCall('https://content.dropboxapi.com/2/files/upload', { method:'POST',
       headers:{ 'Content-Type':'application/octet-stream', 'Dropbox-API-Arg': dbxArg({ path:'/' + name, mode:'add', autorename:true, mute:true }) },
       body: new Blob([backupJSON()]) });
+    DBXS.lastErr = null; dbxSave();
     markBackup(); renderHome();
-    if (!silent) bkStatus('✅ Bekap je na Dropbox-u: Apps › (tvoja aplikacija) › ' + name);
+    if (!silent) bkStatus('✅ Bekap je na Dropbox-u: ' + name);
     else toast('☁️ Automatski bekap je sačuvan na Dropbox');
     try { const all = await dbxListBackups(); for (const e of all.slice(DBX_KEEP)) await dbxCall('https://api.dropboxapi.com/2/files/delete_v2', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ path:e.path_lower }) }); } catch(e){}
   } catch(e){
     if (!silent) bkStatus('⚠️ Bekap nije uspeo: ' + e.message);
     else DBXS.lastErr = e.message, dbxSave();
-  } finally { dbxBusy = false; }
+  } finally { dbxBusy = false; dbxBtn(); }
 }
 function dbxAutoCheck(){
   if (!dbxConnected() || DBXS.auto === false || mode === 'starting' || !navigator.onLine || !allItems().length) return;
@@ -1443,7 +1455,7 @@ function renderDropbox(){
   if (dbxConnected()){
     el.innerHTML = `<div class="small">☁️ <b>Dropbox je povezan.</b> Bekapi idu u folder <i>Apps › (ime tvoje Dropbox aplikacije)</i>; čuva se poslednjih ${DBX_KEEP}.</div>
       ${DBXS.lastErr ? `<div class="small" style="color:var(--danger);margin-top:4px">Poslednji automatski bekap nije uspeo: ${esc(DBXS.lastErr)}</div>` : ''}
-      <button class="btn primary" id="dbxNow">☁️ Bekap na Dropbox sada</button>
+      <button class="btn primary" id="dbxNow" ${dbxBusy ? 'disabled' : ''}>${dbxBusy ? '⏳ Šaljem bekap…' : '☁️ Bekap na Dropbox sada'}</button>
       <label class="setrow"><span>Automatski bekap jednom dnevno</span><input type="checkbox" id="dbxAuto" style="width:22px;height:22px" ${DBXS.auto !== false ? 'checked' : ''}></label>
       <button class="btn" id="dbxRestoreBtn">↩️ Vrati sa Dropbox-a…</button>
       ${dbxList ? `<div class="chips" style="margin-top:8px">${dbxList.map(e => `<button class="chip" data-dbx-path="${esc(e.path_lower)}">${esc(bkLabel(e.name))}</button>`).join('')}</div>` : ''}
@@ -1792,10 +1804,10 @@ function confirmBox(text, okLabel){
   });
 }
 let toastT;
-function toast(t){ const el = $('#toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), 2200); }
+function toast(t, ms){ const el = $('#toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), ms || 2200); }
 
 /* ---------- Start ---------- */
-const APP_VERSION = '2026-11-19.3';
+const APP_VERSION = '2026-11-19.4';
 try { ui.budView = localStorage.getItem('troskovi.budView') === 'spent' ? 'spent' : 'left'; } catch(e){ ui.budView = 'left'; }
 setMode('starting');
 paintEye();
