@@ -151,6 +151,16 @@ nav.tabs svg{width:24px;height:24px}
 .pad button:active{background:var(--line)}
 .shake{animation:sh .3s}
 @keyframes sh{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+details.sec{margin:0 0 10px}
+details.sec > summary{list-style:none;display:flex;align-items:center;gap:10px;cursor:pointer;background:var(--card);border:1px solid var(--line);
+  border-radius:var(--r);box-shadow:var(--shadow);padding:14px;font-weight:600;font-size:16px;color:var(--ink)}
+details.sec > summary::-webkit-details-marker{display:none}
+details.sec > summary .si{font-size:18px;width:24px;text-align:center}
+details.sec > summary::after{content:'›';margin-left:auto;font-size:22px;line-height:1;color:var(--muted);transition:transform .15s}
+details.sec[open] > summary::after{transform:rotate(90deg)}
+details.sec[open] > summary{border-radius:var(--r) var(--r) 0 0;border-bottom-color:transparent;box-shadow:none}
+details.sec > .card{border-top:0;border-radius:0 0 var(--r) var(--r);margin-top:-1px;padding-top:4px}
+#v-podesavanja{padding-top:6px}
 .h2row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:18px 2px 8px}
 .h2row h2{margin:0}
 .seg.sm button{padding:5px 10px;font-size:13px}
@@ -291,13 +301,14 @@ nav.tabs svg{width:24px;height:24px}
 
   <!-- PODESAVANJA -->
   <section class="view" id="v-podesavanja">
-    <h2>Privatnost</h2>
+    <details class="sec" data-sec="priv"><summary><span class="si">🙈</span>Privatnost</summary>
     <div class="card">
       <label class="setrow"><span>Sakrij iznose prihoda (prikaži *****)</span><input type="checkbox" id="privChk" style="width:22px;height:22px;flex:none"></label>
       <div class="note">Kad je uključeno, plata i ostali prihodi (i bilans) prikazuju se kao zvezdice. Dodirni 🙈 gore desno da ih privremeno vidiš — ponovo se sakriju čim izađeš iz aplikacije.</div>
     </div>
+    </details>
 
-    <h2>Valuta</h2>
+    <details class="sec" data-sec="valuta"><summary><span class="si">💱</span>Valuta</summary>
     <div class="card">
       <div class="setrow"><span>Prikaz zbirova u</span>
         <div class="seg" id="dispSeg"><button data-cur="RSD">RSD</button><button data-cur="EUR">EUR</button></div></div>
@@ -305,20 +316,25 @@ nav.tabs svg{width:24px;height:24px}
         <div class="rate"><span class="muted">1 EUR =</span><input class="inp" id="rateInp" inputmode="decimal"><span class="muted">RSD</span></div></div>
       <div class="note">Svaki trošak pamti kurs iz trenutka unosa, pa promena kursa ne menja stare iznose.</div>
     </div>
+    </details>
 
-    <h2>Mesečni budžet</h2>
+    <details class="sec" data-sec="budzet"><summary><span class="si">🎯</span>Mesečni budžet</summary>
     <div class="card" id="budCard"></div>
+    </details>
 
-    <h2>Kategorije troškova</h2>
+    <details class="sec" data-sec="kat"><summary><span class="si">🗂️</span>Kategorije troškova</summary>
     <div class="card" id="catList"></div>
+    </details>
 
-    <h2>Vrste prihoda</h2>
+    <details class="sec" data-sec="prihodi"><summary><span class="si">💰</span>Vrste prihoda</summary>
     <div class="card" id="incList"></div>
+    </details>
 
-    <h2>Ponavljajući troškovi</h2>
+    <details class="sec" data-sec="rec"><summary><span class="si">🔁</span>Ponavljajući troškovi</summary>
     <div class="card" id="recList"></div>
+    </details>
 
-    <h2>Bekap (Dropbox i Google Drive)</h2>
+    <details class="sec" data-sec="bekap"><summary><span class="si">☁️</span>Bekap (Dropbox i Google Drive)</summary>
     <div class="card">
       <div class="small" id="storeInfo"></div>
       <div class="small muted" id="lastBk" style="margin-top:6px"></div>
@@ -334,21 +350,24 @@ nav.tabs svg{width:24px;height:24px}
       <input type="file" id="restoreFile" accept=".json,.b64,.txt,application/json,text/plain" class="vh">
       <div class="small muted" id="bkStatus" style="margin-top:8px"></div>
     </div>
+    </details>
 
-    <h2>Verzija</h2>
+    <details class="sec" data-sec="verzija"><summary><span class="si">🔄</span>Verzija</summary>
     <div class="card small">
       <div>Verzija aplikacije: <b id="appVer"></b></div>
       <button class="btn" id="updBtn">🔄 Proveri i učitaj novu verziju</button>
       <div class="note">Tvoji podaci ostaju — osvežava se samo kod aplikacije.</div>
     </div>
+    </details>
 
-    <h2>Brzi pristup</h2>
+    <details class="sec" data-sec="pristup"><summary><span class="si">📱</span>Brzi pristup</summary>
     <div class="card small">
       Dodaj aplikaciju na početni ekran — tada radi kao prava aplikacija, i bez interneta.<br>
       <b>iPhone (Safari):</b> Podeli → <i>Dodaj na početni ekran</i>.<br>
       <b>Android (Chrome):</b> ⋮ → <i>Instaliraj aplikaciju</i> / <i>Dodaj na početni ekran</i>.<br>
       Na Androidu dugim pritiskom na ikonicu dobijaš prečice do kategorija (Hrana i piće, Prevoz, Računi, Zabava).
     </div>
+    </details>
   </section>
 </main>
 
@@ -537,6 +556,26 @@ async function boot(){
   setTimeout(dbxAutoCheck, 1500);
   offerDecaMerge();
   gdResume();
+}
+
+/* ---------- Podešavanja: segmenti na rasklapanje ---------- */
+function initSections(){
+  let open = []; try { open = JSON.parse(localStorage.getItem('troskovi.secs')) || []; } catch(e){}
+  $$('details.sec').forEach(d => {
+    d.open = open.includes(d.dataset.sec);
+    d.addEventListener('toggle', () => {
+      const now = $$('details.sec').filter(x => x.open).map(x => x.dataset.sec);
+      try { localStorage.setItem('troskovi.secs', JSON.stringify(now)); } catch(e){}
+    });
+  });
+}
+function revealInSettings(sel, focus){
+  if (location.hash !== '#podesavanja') location.hash = '#podesavanja';
+  setTimeout(() => {
+    const el = $(sel); if (!el) return;
+    const d = el.closest('details.sec'); if (d) d.open = true;
+    el.scrollIntoView({ block:'center' }); if (focus && el.focus) el.focus();
+  }, 80);
 }
 
 /* ---------- Navigacija ---------- */
@@ -775,13 +814,13 @@ document.addEventListener('click', async e => {
   if (t.id === 'eyeBtn'){ ui.reveal = !ui.reveal; paintEye(); return render(); }
   if (t.id === 'tileInc') return openIncomePicker();
   if (t.dataset.incPick) return openCategory(t.dataset.incPick);
-  if (t.id === 'incAddCat'){ closeSheet(); location.hash = '#podesavanja'; setTimeout(() => { const i = $('#newIncName'); if (i){ i.scrollIntoView({block:'center'}); i.focus(); } }, 60); return; }
-  if (t.id === 'budSetup'){ location.hash = '#podesavanja'; setTimeout(() => { const b = $('#budCard'); if (b) b.scrollIntoView({block:'start'}); }, 60); return; }
+  if (t.id === 'incAddCat'){ closeSheet(); revealInSettings('#newIncName', true); return; }
+  if (t.id === 'budSetup'){ revealInSettings('#budCard'); return; }
   if (t.dataset.bmode){ S.settings.budget.mode = t.dataset.bmode; persistSettings(); return renderSettings(); }
   if (t.dataset.bcur){ S.settings.budget.c = t.dataset.bcur; persistSettings(); return renderSettings(); }
   if (t.dataset.kind){ ui.kind = t.dataset.kind; ui.openCat = null; ui.pieSel = null; ui.pieCat = null; return renderCharts(); }
   if (t.id === 'newIncSave') return addCat('inc');
-  if (t.id === 'tileAdd'){ location.hash = '#podesavanja'; setTimeout(() => { const i = $('#newCatName'); if (i){ i.scrollIntoView({block:'center'}); i.focus(); } }, 50); return; }
+  if (t.id === 'tileAdd'){ revealInSettings('#newCatName', true); return; }
   if (t.dataset.pickSub !== undefined){ const cid = $('#sheetIn').dataset.cat; return openAmount({ cat:cid, sub:t.dataset.pickSub || null }); }
   if (t.id === 'newSubBtn'){ $('#newSubRow').hidden = false; $('#newSubInp').focus(); return; }
   if (t.id === 'newSubSave'){ const c = cat($('#sheetIn').dataset.cat); const s = addSub(c, $('#newSubInp').value); if (s) openAmount({ cat:c.id, sub:s.id }); return; }
@@ -815,7 +854,7 @@ document.addEventListener('click', async e => {
   if (t.dataset.catHide){ return hideCat(t.dataset.catHide); }
   if (t.dataset.catShow){ const c = cat(t.dataset.catShow); c.hidden = false; persistSettings(); return renderSettings(); }
   if (t.id === 'newCatSave') return addCat('exp');
-  if (t.id === 'bkRemind'){ location.hash = '#podesavanja'; return dbxConnected() ? dbxBackup(false) : GD.clientId ? gdRun('backup') : undefined; }
+  if (t.id === 'bkRemind'){ revealInSettings('#dbxBox'); return dbxConnected() ? dbxBackup(false) : GD.clientId ? gdRun('backup') : undefined; }
   if (t.id === 'dbxStartBtn') return dbxStart();
   if (t.id === 'gdSaveBtn'){ const v = ($('#gdClient').value || '').trim(); if (!/\.apps\.googleusercontent\.com$/.test(v)){ bkStatus('Client ID treba da se završava na „.apps.googleusercontent.com“.'); return; } GD = { clientId:v }; gdSave(); renderDrive(); bkStatus('Google Drive je podešen — dodirni „Bekap na Google Drive sada“.'); return; }
   if (t.id === 'gdNow') return gdRun('backup');
@@ -1410,7 +1449,7 @@ async function dbxListBackups(){
 function dbxBtn(){ const b = $('#dbxNow'); if (b){ b.disabled = dbxBusy; b.textContent = dbxBusy ? '⏳ Šaljem bekap…' : '☁️ Bekap na Dropbox sada'; } }
 async function dbxBackup(silent){
   if (!dbxConnected()){
-    if (!silent){ toast('Dropbox još nije povezan — podesi ga ovde.', 3500); location.hash = '#podesavanja'; setTimeout(() => { const b = $('#dbxBox'); if (b) b.scrollIntoView({ block:'center' }); }, 80); }
+    if (!silent){ toast('Dropbox još nije povezan — podesi ga ovde.', 3500); revealInSettings('#dbxBox'); }
     return;
   }
   if (dbxBusy){ if (!silent) toast('Bekap na Dropbox je već u toku…'); return; }
@@ -1555,7 +1594,7 @@ function gdResume(){
   if (GD.msg){ bkStatus(GD.msg); GD.msg = null; gdSave(); }
   const p = GD.pending; if (!p || !gdHasToken()) return;
   GD.pending = null; gdSave();
-  if (location.hash !== '#podesavanja') location.hash = '#podesavanja';
+  revealInSettings('#gdBox');
   gdRun(p);
 }
 function renderDrive(){
@@ -1807,11 +1846,12 @@ let toastT;
 function toast(t, ms){ const el = $('#toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), ms || 2200); }
 
 /* ---------- Start ---------- */
-const APP_VERSION = '2026-11-19.4';
+const APP_VERSION = '2026-11-19.5';
 try { ui.budView = localStorage.getItem('troskovi.budView') === 'spent' ? 'spent' : 'left'; } catch(e){ ui.budView = 'left'; }
 setMode('starting');
 paintEye();
 $('#appVer').textContent = APP_VERSION;
+initSections();
 gdCatchRedirect();
 route();
 boot();
