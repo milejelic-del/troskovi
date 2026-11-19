@@ -71,6 +71,9 @@ h2{font-size:15px;margin:18px 2px 8px;color:var(--ink2);font-weight:600}
 .bud .bar{height:12px;border-radius:6px;background:var(--chip);margin:10px 0 8px;display:flex;overflow:hidden;gap:2px}
 .bud .bar i{display:block;height:100%}
 .bud .over{color:var(--danger)}
+.budtog{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:2px 0}
+.budtog .big{flex:1;min-width:0}
+.budtog .swap{flex:none;width:28px;height:28px;border-radius:9px;background:var(--chip);color:var(--ink2);display:grid;place-items:center;font-size:15px}
 .kseg{display:grid;grid-template-columns:1fr 1fr;width:100%;margin:2px 0 8px}
 .tile.add{--tint:#898781;border-style:dashed;background:transparent}
 
@@ -387,6 +390,7 @@ const DEFAULT_INC = [
 ];
 const TINTS = ['#2a78d6','#eb6834','#1baf7a','#eda100','#e87ba4','#008300','#6250d6','#e34948'];
 const MONTHS = ['januar','februar','mart','april','maj','jun','jul','avgust','septembar','oktobar','novembar','decembar'];
+const MONTHS_GEN = ['januara','februara','marta','aprila','maja','juna','jula','avgusta','septembra','oktobra','novembra','decembra'];
 const MONTHS_SHORT = ['jan','feb','mar','apr','maj','jun','jul','avg','sep','okt','nov','dec'];
 const DAYS = ['nedelja','ponedeljak','utorak','sreda','četvrtak','petak','subota'];
 const LS_KEY = 'troskovi.v1';
@@ -596,6 +600,10 @@ function budgetInfo(){
   const b = S.settings.budget || { mode:'off' }; if (b.mode === 'off') return null;
   const disp = S.settings.display, ym = curYM(), t = today(), items = itemsOf(ym);
   const spent = sumItems(items.filter(isExp), disp), income = sumItems(items.filter(isInc), disp);
+  // Potrošeno do sada: od 1. u mesecu do danas (bez stavki sa budućim datumom), i isti period prošlog meseca.
+  const spentNow = sumItems(items.filter(i => isExp(i) && i.d <= t), disp);
+  const dom = new Date().getDate(), pym = shiftYM(ym, -1);
+  const prevSame = sumItems(itemsOf(pym).filter(i => isExp(i) && +i.d.slice(8) <= dom), disp);
   let planExp = 0, planInc = 0;
   if (b.plan) (S.settings.rec || []).filter(R => R.active && R.start <= ym).forEach(R => {
     if (items.some(i => i.rec === R.id) || recDate(R, ym) <= t) return;
@@ -605,7 +613,7 @@ function budgetInfo(){
   const [y, m] = ym.split('-').map(Number), dim = new Date(y, m, 0).getDate();
   const daysLeft = dim - new Date().getDate() + 1;
   const left = base - spent - planExp;
-  return { b, disp, base, spent, income, planExp, planInc, left, daysLeft, perDay: left / daysLeft };
+  return { b, disp, base, spent, income, planExp, planInc, left, daysLeft, perDay: left / daysLeft, spentNow, dom, prevSame, pym };
 }
 function renderBudget(){
   const el = $('#budget'); if (!el) return;
@@ -614,16 +622,22 @@ function renderBudget(){
       <span style="font-size:20px">🎯</span><span style="flex:1">Postavi mesečni budžet da vidiš koliko ti je ostalo do kraja meseca.</span><span class="chip">Podesi</span></button>`; return; }
   const d = B.disp, f = v => fmt(v, d, true), over = B.left < 0;
   const tot = Math.max(B.base, B.spent + B.planExp, 1);
-  const wS = Math.min(100, B.spent / tot * 100), wP = Math.min(100 - wS, B.planExp / tot * 100);
+  const sv = ui.budView === 'spent';
+  const wS = Math.min(100, (sv ? B.spentNow : B.spent) / tot * 100), wP = sv ? 0 : Math.min(100 - wS, B.planExp / tot * 100);
   const fI = v => fmtI(v, d, true);
   const src = B.b.mode === 'income' ? `prihodi ${fI(B.income)}${B.planInc ? ' + očekivano ' + fI(B.planInc) : ''}` : 'fiksni budžet';
   el.innerHTML = `<div class="card bud">
     <div class="top"><span class="small muted">Budžet · ${MONTHS[new Date().getMonth()]}</span><span class="small muted">${esc(B.b.mode === 'income' ? fI(B.base) : f(B.base))}</span></div>
-    <div class="big ${over ? 'over' : ''}">${over ? '⚠️ Prekoračeno ' + esc(f(-B.left)) : 'Preostalo ' + esc(f(B.left))}</div>
+    ${ui.budView === 'spent' ? `<button class="budtog" id="budToggle" aria-label="Prikaži preostalo">
+        <span class="big">Potrošeno do sada ${esc(f(B.spentNow))}</span><span class="swap" aria-hidden="true">⇄</span></button>
+      <div class="small" style="margin-top:2px">od 1. ${MONTHS_GEN[new Date().getMonth()]} do danas (${B.dom} ${B.dom === 1 ? 'dan' : 'dana'}) · ≈ <b>${esc(f(B.spentNow / B.dom))}</b> dnevno${B.base > 0 && !(B.b.mode === 'income' && hideInc()) ? ` · ${nfRSD0.format(B.spentNow / B.base * 100)}% budžeta` : ''}</div>
+      ${B.prevSame > 0 ? `<div class="small muted" style="margin-top:2px">${MONTHS[+B.pym.slice(5) - 1]} do ${B.dom}.: ${esc(f(B.prevSame))} (${B.spentNow >= B.prevSame ? '▲' : '▼'} ${nfRSD0.format(Math.abs(B.spentNow - B.prevSame) / B.prevSame * 100)}%)</div>` : ''}`
+    : `<button class="budtog" id="budToggle" aria-label="Prikaži potrošeno do sada">
+        <span class="big ${over ? 'over' : ''}">${over ? '⚠️ Prekoračeno ' + esc(f(-B.left)) : 'Preostalo ' + esc(f(B.left))}</span><span class="swap" aria-hidden="true">⇄</span></button>`}
     <div class="bar" role="img" aria-label="Potrošeno ${esc(f(B.spent))}">
       <i style="width:${wS.toFixed(1)}%;background:${over ? 'var(--danger)' : 'var(--series)'}"></i>${wP > 0 ? `<i style="width:${wP.toFixed(1)}%;background:var(--series);opacity:.35"></i>` : ''}</div>
-    <div class="small muted">Potrošeno ${esc(f(B.spent))}${B.planExp ? ' · planirano još ' + esc(f(B.planExp)) : ''} · ${esc(src)}</div>
-    <div class="small" style="margin-top:4px">${over ? 'Do kraja meseca: ' + B.daysLeft + ' ' + (B.daysLeft === 1 ? 'dan' : 'dana') : `Još ${B.daysLeft} ${B.daysLeft === 1 ? 'dan' : 'dana'} · možeš da trošiš <b>≈ ${esc(f(B.perDay))}</b> dnevno`}</div>
+    ${ui.budView === 'spent' ? '' : `<div class="small muted">Potrošeno ${esc(f(B.spent))}${B.planExp ? ' · planirano još ' + esc(f(B.planExp)) : ''} · ${esc(src)}</div>
+    <div class="small" style="margin-top:4px">${over ? 'Do kraja meseca: ' + B.daysLeft + ' ' + (B.daysLeft === 1 ? 'dan' : 'dana') : `Još ${B.daysLeft} ${B.daysLeft === 1 ? 'dan' : 'dana'} · možeš da trošiš <b>≈ ${esc(f(B.perDay))}</b> dnevno`}</div>`}
   </div>`;
 }
 function openIncomePicker(){
@@ -756,6 +770,7 @@ document.addEventListener('click', async e => {
   if (t.dataset.close !== undefined) return closeSheet();
   if (t.dataset.cat && t.classList.contains('tile')) return openCategory(t.dataset.cat);
   if (t.id === 'updBtn') return forceUpdate();
+  if (t.id === 'budToggle'){ ui.budView = ui.budView === 'spent' ? 'left' : 'spent'; try { localStorage.setItem('troskovi.budView', ui.budView); } catch(e){} return renderBudget(); }
   if (t.id === 'eyeBtn'){ ui.reveal = !ui.reveal; paintEye(); return render(); }
   if (t.id === 'tileInc') return openIncomePicker();
   if (t.dataset.incPick) return openCategory(t.dataset.incPick);
@@ -1736,7 +1751,8 @@ let toastT;
 function toast(t){ const el = $('#toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), 2200); }
 
 /* ---------- Start ---------- */
-const APP_VERSION = '2026-11-17.2';
+const APP_VERSION = '2026-11-19.1';
+try { ui.budView = localStorage.getItem('troskovi.budView') === 'spent' ? 'spent' : 'left'; } catch(e){ ui.budView = 'left'; }
 setMode('starting');
 paintEye();
 $('#appVer').textContent = APP_VERSION;
