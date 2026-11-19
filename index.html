@@ -535,6 +535,7 @@ async function boot(){
   route();
   genRecurring();
   setTimeout(dbxAutoCheck, 1500);
+  offerDecaMerge();
   gdResume();
 }
 
@@ -810,6 +811,7 @@ document.addEventListener('click', async e => {
   if (t.dataset.catMove){ return moveCat(t.dataset.catId, +t.dataset.catMove); }
   if (t.dataset.subDel){ return removeSub(t.dataset.catId, t.dataset.subDel); }
   if (t.dataset.subAdd){ const c = cat(t.dataset.subAdd); const inp = $('#subAdd-' + c.id); if (addSub(c, inp.value)){ inp.value = ''; renderSettings(); } return; }
+  if (t.dataset.merge){ const sel = $('#mergeTo-' + t.dataset.merge); if (sel && sel.value) return askMerge(t.dataset.merge, sel.value); return; }
   if (t.dataset.catHide){ return hideCat(t.dataset.catHide); }
   if (t.dataset.catShow){ const c = cat(t.dataset.catShow); c.hidden = false; persistSettings(); return renderSettings(); }
   if (t.id === 'newCatSave') return addCat('exp');
@@ -1182,6 +1184,8 @@ function catEditorHTML(list, kind){
           <input class="inp" data-sub-name="${esc(s.id)}" data-cat-id="${esc(c.id)}" value="${esc(s.name)}" style="border:0;background:transparent;padding:4px 6px;width:${Math.max(6, s.name.length + 1)}ch;max-width:200px">
           <button class="x" data-sub-del="${esc(s.id)}" data-cat-id="${esc(c.id)}" aria-label="Ukloni ${esc(s.name)}">×</button></span>`).join('') || '<span class="muted small">Nema podkategorija</span>'}</div>
         <div class="addsub"><input class="inp" id="subAdd-${esc(c.id)}" placeholder="Nova podkategorija" maxlength="40"><button class="btn primary" data-sub-add="${esc(c.id)}">Dodaj</button></div>
+        <div class="small muted" style="margin:14px 0 6px">Prebaci sve stavke u drugu kategoriju (ova se zatim uklanja)</div>
+        <div class="addsub" style="margin-top:0"><select class="inp" id="mergeTo-${esc(c.id)}">${list.filter(x => x.id !== c.id && !x.hidden).map(x => `<option value="${esc(x.id)}">${esc(x.icon + ' ' + x.name)}</option>`).join('')}</select><button class="btn" data-merge="${esc(c.id)}">Prebaci</button></div>
         <button class="btn danger" data-cat-hide="${esc(c.id)}">Ukloni kategoriju</button></div>`;
     }
     return r;
@@ -1209,6 +1213,46 @@ async function removeSub(cid, sid){
   const c = cat(cid), s = subOf(c, sid);
   if (!(await confirmBox(`Ukloniti podkategoriju „${s.name}“? Postojeći troškovi ostaju sačuvani.`, 'Ukloni'))) return;
   s.hidden = true; persistSettings(); renderSettings();
+}
+function countIn(cid){ return allItems().filter(i => i.cat === cid).length; }
+function mergeCat(srcId, dstId){
+  const src = cat(srcId), dst = cat(dstId); if (!src || !dst || src === dst) return 0;
+  const subMap = {};
+  src.subs.forEach(sb => {
+    let t = dst.subs.find(x => norm(x.name) === norm(sb.name));
+    if (!t){ t = { id:uid(), name:sb.name, hidden:sb.hidden }; dst.subs.push(t); }
+    else if (t.hidden && !sb.hidden) t.hidden = false;
+    subMap[sb.id] = t.id;
+  });
+  let n = 0;
+  Object.keys(S.months).forEach(ym => {
+    let ch = false;
+    S.months[ym].forEach(it => { if (it.cat === srcId){ it.cat = dstId; it.sub = it.sub ? (subMap[it.sub] || null) : null; ch = true; n++; } });
+    if (ch) persistMonth(ym);
+  });
+  (S.settings.rec || []).forEach(R => { if (R.cat === srcId){ R.cat = dstId; R.sub = R.sub ? (subMap[R.sub] || null) : null; } });
+  const L = incCat(srcId) ? S.settings.incCats : S.settings.cats;
+  L.splice(L.indexOf(src), 1);
+  if (ui.fCat === srcId) ui.fCat = ''; if (ui.openCat === srcId) ui.openCat = null; if (ui.pieCat === srcId) ui.pieCat = null;
+  if (ui.editCat === srcId) ui.editCat = dstId;
+  persistSettings();
+  return n;
+}
+async function askMerge(srcId, dstId){
+  const src = cat(srcId), dst = cat(dstId); if (!src || !dst) return;
+  const n = countIn(srcId);
+  if (!(await confirmBox(`Prebaciti ${n} ${(n % 10 === 1 && n % 100 !== 11) ? 'stavku' : ([2,3,4].includes(n % 10) && ![12,13,14].includes(n % 100)) ? 'stavke' : 'stavki'} iz „${src.name}“ u „${dst.name}“ i ukloniti kategoriju „${src.name}“? Podkategorije se prenose (iste po imenu se spajaju).`, 'Prebaci'))) return;
+  const moved = mergeCat(srcId, dstId);
+  render(); toast(`Prebačeno ${moved} u „${dst.name}“, „${src.name}“ je uklonjena`);
+}
+// Jednokratno: ponudi spajanje „Deca/Dete“ → „Mateja“ (traženo za ovaj telefon).
+function offerDecaMerge(){
+  try { if (localStorage.getItem('troskovi.offer.decaMateja')) return; } catch(e){ return; }
+  const src = S.settings.cats.find(c => c.id === 'deca' || ['deca','dete'].includes(norm(c.name)));
+  const dst = S.settings.cats.find(c => norm(c.name) === 'mateja');
+  if (!src || !dst || src === dst) return;
+  try { localStorage.setItem('troskovi.offer.decaMateja', '1'); } catch(e){}
+  setTimeout(() => askMerge(src.id, dst.id), 700);
 }
 async function hideCat(cid){
   const c = cat(cid);
@@ -1751,7 +1795,7 @@ let toastT;
 function toast(t){ const el = $('#toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), 2200); }
 
 /* ---------- Start ---------- */
-const APP_VERSION = '2026-11-19.2';
+const APP_VERSION = '2026-11-19.3';
 try { ui.budView = localStorage.getItem('troskovi.budView') === 'spent' ? 'spent' : 'left'; } catch(e){ ui.budView = 'left'; }
 setMode('starting');
 paintEye();
