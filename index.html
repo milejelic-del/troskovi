@@ -555,6 +555,7 @@ async function boot(){
   genRecurring();
   setTimeout(dbxAutoCheck, 1500);
   offerDecaMerge();
+  offerIncomeFix();
   gdResume();
 }
 
@@ -850,6 +851,7 @@ document.addEventListener('click', async e => {
   if (t.dataset.catMove){ return moveCat(t.dataset.catId, +t.dataset.catMove); }
   if (t.dataset.subDel){ return removeSub(t.dataset.catId, t.dataset.subDel); }
   if (t.dataset.subAdd){ const c = cat(t.dataset.subAdd); const inp = $('#subAdd-' + c.id); if (addSub(c, inp.value)){ inp.value = ''; renderSettings(); } return; }
+  if (t.dataset.convert) return askConvert(t.dataset.convert);
   if (t.dataset.merge){ const sel = $('#mergeTo-' + t.dataset.merge); if (sel && sel.value) return askMerge(t.dataset.merge, sel.value); return; }
   if (t.dataset.catHide){ return hideCat(t.dataset.catHide); }
   if (t.dataset.catShow){ const c = cat(t.dataset.catShow); c.hidden = false; persistSettings(); return renderSettings(); }
@@ -1224,7 +1226,8 @@ function catEditorHTML(list, kind){
           <button class="x" data-sub-del="${esc(s.id)}" data-cat-id="${esc(c.id)}" aria-label="Ukloni ${esc(s.name)}">×</button></span>`).join('') || '<span class="muted small">Nema podkategorija</span>'}</div>
         <div class="addsub"><input class="inp" id="subAdd-${esc(c.id)}" placeholder="Nova podkategorija" maxlength="40"><button class="btn primary" data-sub-add="${esc(c.id)}">Dodaj</button></div>
         <div class="small muted" style="margin:14px 0 6px">Prebaci sve stavke u drugu kategoriju (ova se zatim uklanja)</div>
-        <div class="addsub" style="margin-top:0"><select class="inp" id="mergeTo-${esc(c.id)}">${list.filter(x => x.id !== c.id && !x.hidden).map(x => `<option value="${esc(x.id)}">${esc(x.icon + ' ' + x.name)}</option>`).join('')}</select><button class="btn" data-merge="${esc(c.id)}">Prebaci</button></div>
+        <div class="addsub" style="margin-top:0"><select class="inp" id="mergeTo-${esc(c.id)}">${[['Troškovi', S.settings.cats], ['Prihodi', S.settings.incCats]].map(([g, L]) => `<optgroup label="${g}">${L.filter(x => x.id !== c.id && !x.hidden).map(x => `<option value="${esc(x.id)}">${esc(x.icon + ' ' + x.name)}</option>`).join('')}</optgroup>`).join('')}</select><button class="btn" data-merge="${esc(c.id)}">Prebaci</button></div>
+        <button class="btn" data-convert="${esc(c.id)}">${kind === 'inc' ? '↔️ Ovo je trošak — prebaci u troškove' : '💰 Ovo je zarada — prebaci u prihode'}</button>
         <button class="btn danger" data-cat-hide="${esc(c.id)}">Ukloni kategoriju</button></div>`;
     }
     return r;
@@ -1255,34 +1258,96 @@ async function removeSub(cid, sid){
 }
 function countIn(cid){ return allItems().filter(i => i.cat === cid).length; }
 function mergeCat(srcId, dstId){
-  const src = cat(srcId), dst = cat(dstId); if (!src || !dst || src === dst) return 0;
-  const subMap = {};
+  // Prebacuje sve stavke (i ponavljajuće) u drugu kategoriju — i između troškova i prihoda.
+  // Stavka koja već postoji u odredištu (isti datum, iznos, valuta, podkategorija, napomena) se ne duplira.
+  const src = cat(srcId), dst = cat(dstId); if (!src || !dst || src === dst) return { n:0, dup:0 };
+  const toInc = !!incCat(dstId), subMap = {};
   src.subs.forEach(sb => {
     let t = dst.subs.find(x => norm(x.name) === norm(sb.name));
     if (!t){ t = { id:uid(), name:sb.name, hidden:sb.hidden }; dst.subs.push(t); }
     else if (t.hidden && !sb.hidden) t.hidden = false;
     subMap[sb.id] = t.id;
   });
-  let n = 0;
+  const key = (it, subId) => [it.d, Math.round(it.a * 100), it.c, subId || '', norm(it.n)].join('|');
+  const have = new Map();
+  allItems().forEach(it => { if (it.cat === dstId){ const k = key(it, it.sub); have.set(k, (have.get(k) || 0) + 1); } });
+  let n = 0, dup = 0;
   Object.keys(S.months).forEach(ym => {
     let ch = false;
-    S.months[ym].forEach(it => { if (it.cat === srcId){ it.cat = dstId; it.sub = it.sub ? (subMap[it.sub] || null) : null; ch = true; n++; } });
+    S.months[ym] = S.months[ym].filter(it => {
+      if (it.cat !== srcId) return true;
+      ch = true;
+      const sub = it.sub ? (subMap[it.sub] || null) : null, k = key(it, sub), left = have.get(k) || 0;
+      if (left > 0){ have.set(k, left - 1); dup++; return false; }
+      it.cat = dstId; it.sub = sub; if (toInc) it.k = 'inc'; else delete it.k; n++;
+      return true;
+    });
     if (ch) persistMonth(ym);
   });
-  (S.settings.rec || []).forEach(R => { if (R.cat === srcId){ R.cat = dstId; R.sub = R.sub ? (subMap[R.sub] || null) : null; } });
+  (S.settings.rec || []).forEach(R => { if (R.cat === srcId){ R.cat = dstId; R.sub = R.sub ? (subMap[R.sub] || null) : null; R.k = toInc ? 'inc' : undefined; } });
   const L = incCat(srcId) ? S.settings.incCats : S.settings.cats;
   L.splice(L.indexOf(src), 1);
   if (ui.fCat === srcId) ui.fCat = ''; if (ui.openCat === srcId) ui.openCat = null; if (ui.pieCat === srcId) ui.pieCat = null;
   if (ui.editCat === srcId) ui.editCat = dstId;
   persistSettings();
-  return n;
+  return { n, dup };
+}
+function convertKind(cid){
+  // Premešta kategoriju iz troškova u prihode (ili obrnuto), sa svim stavkama.
+  const c = cat(cid); if (!c) return { n:0, dup:0 };
+  const toInc = !incCat(cid), other = toInc ? S.settings.incCats : S.settings.cats;
+  const same = other.find(x => norm(x.name) === norm(c.name));
+  if (same) return mergeCat(cid, same.id);
+  const from = toInc ? S.settings.cats : S.settings.incCats;
+  from.splice(from.indexOf(c), 1);
+  if (toInc) c.tint = '#1baf7a';
+  other.push(c);
+  let n = 0;
+  Object.keys(S.months).forEach(ym => {
+    let ch = false;
+    S.months[ym].forEach(it => { if (it.cat === cid){ if (toInc) it.k = 'inc'; else delete it.k; ch = true; n++; } });
+    if (ch) persistMonth(ym);
+  });
+  (S.settings.rec || []).forEach(R => { if (R.cat === cid) R.k = toInc ? 'inc' : undefined; });
+  persistSettings();
+  return { n, dup:0 };
+}
+const plural = (n, a, b, c) => (n % 10 === 1 && n % 100 !== 11) ? a : ([2,3,4].includes(n % 10) && ![12,13,14].includes(n % 100)) ? b : c;
+async function askConvert(cid){
+  const c = cat(cid); if (!c) return;
+  const toInc = !incCat(cid), n = countIn(cid);
+  if (!(await confirmBox(toInc
+      ? `„${c.name}“ je zarada, ne trošak? Prebaciti kategoriju i ${n} ${plural(n, 'stavku', 'stavke', 'stavki')} u prihode? Tada se dodaju, umesto da se oduzimaju.`
+      : `Prebaciti „${c.name}“ i ${n} ${plural(n, 'stavku', 'stavke', 'stavki')} iz prihoda u troškove?`, 'Prebaci'))) return;
+  const r = convertKind(cid);
+  ui.editCat = null; render();
+  toast(`„${c.name}“ je sada ${toInc ? 'prihod' : 'trošak'} (${r.n} ${plural(r.n, 'stavka', 'stavke', 'stavki')}${r.dup ? `, uklonjeno ${r.dup} duplikata` : ''})`, 4500);
+}
+// Jednokratno: kategorije koje su sačuvane kao troškovi, a nazivom su prihodi (npr. uvezene u starijoj verziji).
+function offerIncomeFix(){
+  // Samo nazivi koji su isključivo prihodi (npr. „Pokloni“ postoji i kao trošak, pa se ne dira).
+  const expNames = new Set(DEFAULT_CATS.map(d => norm(d[1])));
+  const names = new Set(DEFAULT_INC.map(d => norm(d[1])).filter(n => !expNames.has(n)));
+  const bad = S.settings.cats.filter(c => names.has(norm(c.name)) && countIn(c.id) > 0);
+  if (!bad.length) return;
+  const sig = bad.map(c => c.id).sort().join(',');
+  try { if (localStorage.getItem('troskovi.offer.incfix') === sig) return; } catch(e){ return; }
+  const n = bad.reduce((t, c) => t + countIn(c.id), 0);
+  setTimeout(async () => {
+    const ok = await confirmBox(`Ove kategorije su sačuvane kao TROŠKOVI, a to je zarada: ${bad.map(c => '„' + c.name + '“').join(', ')} (${n} ${plural(n, 'stavka', 'stavke', 'stavki')}). Prebaciti ih u prihode? Ako ista stavka već postoji kao prihod, neće se duplirati.`, 'Prebaci u prihode');
+    try { localStorage.setItem('troskovi.offer.incfix', sig); } catch(e){}
+    if (!ok) return;
+    let moved = 0, dup = 0;
+    bad.forEach(c => { const r = convertKind(c.id); moved += r.n; dup += r.dup; });
+    render(); toast(`✅ Prebačeno u prihode: ${moved}${dup ? ` · uklonjeno duplikata: ${dup}` : ''}`, 5000);
+  }, 900);
 }
 async function askMerge(srcId, dstId){
   const src = cat(srcId), dst = cat(dstId); if (!src || !dst) return;
   const n = countIn(srcId);
   if (!(await confirmBox(`Prebaciti ${n} ${(n % 10 === 1 && n % 100 !== 11) ? 'stavku' : ([2,3,4].includes(n % 10) && ![12,13,14].includes(n % 100)) ? 'stavke' : 'stavki'} iz „${src.name}“ u „${dst.name}“ i ukloniti kategoriju „${src.name}“? Podkategorije se prenose (iste po imenu se spajaju).`, 'Prebaci'))) return;
-  const moved = mergeCat(srcId, dstId);
-  render(); toast(`Prebačeno ${moved} u „${dst.name}“, „${src.name}“ je uklonjena`);
+  const r = mergeCat(srcId, dstId);
+  render(); toast(`Prebačeno ${r.n} u „${dst.name}“${r.dup ? `, uklonjeno ${r.dup} duplikata` : ''}, „${src.name}“ je uklonjena`, 4000);
 }
 // Jednokratno: ponudi spajanje „Deca/Dete“ → „Mateja“ (traženo za ovaj telefon).
 function offerDecaMerge(){
@@ -1290,8 +1355,7 @@ function offerDecaMerge(){
   const src = S.settings.cats.find(c => c.id === 'deca' || ['deca','dete'].includes(norm(c.name)));
   const dst = S.settings.cats.find(c => norm(c.name) === 'mateja');
   if (!src || !dst || src === dst) return;
-  try { localStorage.setItem('troskovi.offer.decaMateja', '1'); } catch(e){}
-  setTimeout(() => askMerge(src.id, dst.id), 700);
+  setTimeout(async () => { await askMerge(src.id, dst.id); try { localStorage.setItem('troskovi.offer.decaMateja', '1'); } catch(e){} }, 700);
 }
 async function hideCat(cid){
   const c = cat(cid);
@@ -1834,19 +1898,23 @@ async function deleteRec(){
 }
 
 /* ---------- Dijalozi ---------- */
+let modalChain = Promise.resolve();
 function confirmBox(text, okLabel){
-  return new Promise(res => {
+  // Pitanja idu jedno za drugim — novo ne prekriva ono na koje još nije odgovoreno.
+  const p = modalChain.then(() => new Promise(res => {
     $('#mText').textContent = text; $('#mYes').textContent = okLabel || 'U redu';
     $('#modal').classList.add('on');
     const done = v => { $('#modal').classList.remove('on'); $('#mYes').onclick = $('#mNo').onclick = null; res(v); };
     $('#mYes').onclick = () => done(true); $('#mNo').onclick = () => done(false);
-  });
+  }));
+  modalChain = p.catch(() => {});
+  return p;
 }
 let toastT;
 function toast(t, ms){ const el = $('#toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), ms || 2200); }
 
 /* ---------- Start ---------- */
-const APP_VERSION = '2026-11-19.5';
+const APP_VERSION = '2026-11-22.1';
 try { ui.budView = localStorage.getItem('troskovi.budView') === 'spent' ? 'spent' : 'left'; } catch(e){ ui.budView = 'left'; }
 setMode('starting');
 paintEye();
